@@ -6,13 +6,12 @@
  *    Checker de la práctica de MML
  *
  *    Autor: Alberto Gil Solla
- *    Curso : 2017-2018
+ *    Curso : 2021-2022
  ****************************************************************/
 
+// Implementación de la comprobación de la consulta 1 (reparto de una película de un año)
 
-// Implementación de la comprobación de la consulta 1 (filmografía de un actor S3 en una película S2 de un año S1)
-
-package docencia.sint.MML.checker;
+package docencia.sint.MML2021.checker;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -20,11 +19,11 @@ import java.io.BufferedWriter;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.RequestDispatcher;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -32,213 +31,255 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
+import java.net.URLEncoder;
+import java.io.UnsupportedEncodingException;
 
-import docencia.sint.MML.Pelicula;
-import docencia.sint.MML.Actor;
-import docencia.sint.MML.CommonMML;
-import docencia.sint.MML.Filmografia;
-import docencia.sint.MML.Film;
+import docencia.sint.Common.CheckerFailure;
 import docencia.sint.Common.CommonSINT;
-import docencia.sint.Common.ExcepcionSINT;
+import docencia.sint.Common.ExcepcionChecker;
 import docencia.sint.Common.SintRandom;
-
+import docencia.sint.Common.BeanResultados;
+import docencia.sint.Common.MsCP;
+import docencia.sint.Common.MsCC;
+import docencia.sint.MML2021.MsMML;
+import docencia.sint.MML2021.Movie;
+import docencia.sint.MML2021.Cast;
 
 
 public class Query1 {
-	
+
 	// nombres de los parámetros de esta consulta
-		
-	static final String PFASE = "pfase";	
-	static final String PANIO = "panio";
-	static final String PPELI = "ppelicula";
-	static final String PACTOR = "pact";
+	static final String NAMEP1 = "pyear";
+	static final String NAMEP2 = "pmovie";
 	
+	static final String R1P = "years";
+	static final String R2P = "movies";
+	static final String R3P = "casts";
+	
+	static final String F1 = "11";
+	static final String F2 = "12";
+	static final String F3 = "13";
+
+
 	// COMPROBACIÓN DE LAS LLAMADAS A SINTPROF
-	
-	public static void doGetC1CheckSintprofCalls(HttpServletRequest request, PrintWriter out)
+	// es sólo para el profesor, no es necesario traducir
+
+	public static void doGetC1CheckSintprofCalls(HttpServletRequest request, HttpServletResponse response, String cLang)
 						throws IOException, ServletException
 	{
-		int esProfesor = 1;  // sólo el profesor debería llegar aquí
+		PrintWriter out = response.getWriter();
+
+		CheckerFailure cf;
+		int esProfesor = 1;  // sólo el profesor debería llegar aquí, podemos poner esto a 1
 		
+		String currentMethod = Thread.currentThread().getStackTrace()[1].getMethodName();
+
 		out.println("<html>");
-		CommonMMLChecker.printHead(out);
-		CommonMMLChecker.printBodyHeader(out);
-		
-		out.println("<h2>Consulta 1</h2>");
+		CommonMMLChecker.printHead(out, cLang);
+		CommonMMLChecker.printBodyHeader(out, cLang);
+
+		out.println("<h2>Consulta 1</h2>");  // CAMBIAR 2
 		out.println("<h3>Comprobar las llamadas al servicio de sintprof</h3>");
-		
-		String oneCheckStatus;  // para leer el Status de profesor 
 
 		// doOneCheckUpStatus: hace una petición de estado al servicio del profesor para ver si está operativo
 
-		oneCheckStatus = CommonMMLChecker.doOneCheckUpStatus(request, "sintprof", CommonSINT.PASSWD);
-
-		String statusCode = oneCheckStatus.substring(0,oneCheckStatus.indexOf(','));
-		String statusPhrase = oneCheckStatus.substring (oneCheckStatus.indexOf(',')+1);
-		
-		if (!statusCode.equals("OK")) {
-			out.println("<h4 style='color: red'>sintprof (error status): "+statusPhrase+"</h4>");
-			CommonSINT.printEndPageChecker(out,  "0", esProfesor, CommonMML.CREATED);
+		try {
+			CommonMMLChecker.doOneCheckUpStatus(request, "sintprof", CommonSINT.PPWD, cLang);
+		}
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			out.println("<h4 style='color: red'>"+currentMethod+": error al preguntar por el estado de sintprof: <br>");
+			out.println(cf.toHTMLString());
+			out.println("</h4>");
+			CommonSINT.printEndPageChecker(out,  "0", esProfesor, MsMMLCh.CREATED, cLang);
 			return;
 		}
-		else {
-			out.println("<h4>CheckStatus OK</h4>");
-		}
 
-		
-		
+		out.println("<h4>Check Status OK</h4>");
+
+
+
+
 		// empezamos por pedir los errores
-		
+
+		Element wrongDocs;
+
 		try {
-			CommonMMLChecker.requestErrores("sintprof", CommonMMLChecker.servicioProf, CommonSINT.PASSWD);	
-			out.println("<h4>Errores OK</h4>");
+			wrongDocs = CommonMMLChecker.requestErrores("sintprof", CommonMMLChecker.servicioProf, CommonSINT.PPWD, cLang);
 		}
-		catch (ExcepcionSINT ex) { 
-			out.println("<h4 style='color: red'>sintprof (ExcepcionSINT pidiendo errores): "+ex.toString()+"</h4>");
-			CommonSINT.printEndPageChecker(out,  "0", esProfesor, CommonMML.CREATED);
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			out.println("<h4 style='color: red'>"+currentMethod+": ExcepcionChecker pidiendo los errores: <br>");
+			out.println(cf.toHTMLString());
+			out.println("</h4>");
+			CommonSINT.printEndPageChecker(out,  "0", esProfesor, MsMMLCh.CREATED, cLang);
 			return;
-        }
-		catch (Exception ex) { 
-			out.println("<h4 style='color: red'>sintprof (Exception pidiendo errores): "+ex.toString()+"</h4>");
-			CommonSINT.printEndPageChecker(out,  "0", esProfesor, CommonMML.CREATED);
+		}
+		catch (Exception ex) {
+			out.println("<h4 style='color: red'>"+currentMethod+": Exception pidiendo los errores: "+ex.toString()+"</h4>");
+			CommonSINT.printEndPageChecker(out,  "0", esProfesor, MsMMLCh.CREATED, cLang);
 			return;
-        }
-		
-		
+		}
+
+		NodeList nlWarnings = wrongDocs.getElementsByTagName("warning");
+		NodeList nlErrors = wrongDocs.getElementsByTagName("error");
+		NodeList nlFatalErrors = wrongDocs.getElementsByTagName("fatalerror");
+
+		out.println("<h4>Errores OK: "+nlWarnings.getLength()+", "+nlErrors.getLength()+", "+nlFatalErrors.getLength()+"</h4>");
+
+
 		// y ahora todas y cada una de las consultas
-		
-		// pedimos la lista de años de sintprof
-	 
-		ArrayList<String> pAnios;
+
+		// pedimos la lista de years de sintprof
+
+		String qs = "?auto=true&"+CommonSINT.PFASE+"="+Query1.F1+"&p="+CommonSINT.PPWD;
+		String call = CommonMMLChecker.servicioProf+qs;
+
+		ArrayList<String> pYears;
 		try {
-			pAnios = Query1.requestAnios("sintprof", CommonMMLChecker.servicioProf, CommonSINT.PASSWD);
-			out.println("<h4>Años OK: "+pAnios.size()+"</h4>");
+			pYears = Query1.requestYears(call, cLang);
+			out.println("<h4>Years OK: "+pYears.size()+"</h4>");
 		}
-		catch (ExcepcionSINT ex) { 
-			out.println("<h4 style='color: red'>sintprof (ExcepcionSINT pidiendo años): "+ex.toString()+"</h4>");
-			CommonSINT.printEndPageChecker(out,  "0", esProfesor, CommonMML.CREATED);
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			out.println("<h4 style='color: red'>"+currentMethod+": ExcepcionChecker pidiendo los years a sintprof: <br>");
+			out.println(cf.toHTMLString());
+			out.println("</h4>");
+			CommonSINT.printEndPageChecker(out,  "0", esProfesor, MsMMLCh.CREATED, cLang);
 			return;
-        }
-	
-	
-	    
-		// vamos con la segunda fase, las películas de cada año
-		// el bucle X recorre todos los años
-		
-		
-		String anioActual;
-	     
-		for (int x=0; x < pAnios.size(); x++) {
+    }
+
+
+
+		// vamos con la segunda fase, las movies de cada year
+		// el bucle X recorre todos los years
+
+
+		String yearActual;
+
+		for (int x=0; x < pYears.size(); x++) {
 			String indent ="&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-	    	
-			anioActual = pAnios.get(x);
-			
-			// pedimos las películas de ese año de sintprof
-	   	 
-			ArrayList<Pelicula> pPeliculas;
+
+			yearActual = pYears.get(x);
+
+			// pedimos las movies de ese year de sintprof
+			// aplicamos un URLencode por si el valor tiene caracteres no ASCII
+			// no es el caso de years
+
 			try {
-				pPeliculas = requestPeliculasAnio("sintprof", CommonMMLChecker.servicioProf, anioActual, CommonSINT.PASSWD);
-				out.println("<h4>"+indent+anioActual+": "+pPeliculas.size()+"  OK</h4>");
+			    qs = "?auto=true&"+CommonSINT.PFASE+"="+Query1.F2+"&"+NAMEP1+"="+URLEncoder.encode(yearActual, "utf-8")+"&p="+CommonSINT.PPWD;
+				call = CommonMMLChecker.servicioProf+qs;
 			}
-			catch (Exception e) { 
-				out.println("<h4 style='color: red'>sintprof (Películas): "+e.toString()+"</h4>");
-				CommonSINT.printEndPageChecker(out,  "0", esProfesor, CommonMML.CREATED);
+		  catch (UnsupportedEncodingException ex) {
+					out.println("<h4 style='color: red'>"+currentMethod+": UnsupportedEncodingException pidiendo "+Query1.R2P+": UTF-8 no soportado</h4>");
+					CommonSINT.printEndPageChecker(out,  "0", esProfesor, MsMMLCh.CREATED, cLang);
+					return;
+		  }
+
+			ArrayList<Movie> pMovies;
+			try {
+				pMovies = requestMoviesYear(call, cLang);
+				out.println("<h4>"+indent+yearActual+": "+pMovies.size()+"  OK</h4>");
+			}
+			catch (ExcepcionChecker e) {
+				cf = e.getCheckerFailure();
+				out.println("<h4 style='color: red'>"+currentMethod+": ExcepcionChecker pidiendo "+Query1.R2P+" de "+yearActual+" a sintprof: <br>");
+				out.println(cf.toHTMLString());
+				out.println("</h4>");
+				CommonSINT.printEndPageChecker(out,  "0", esProfesor, MsMMLCh.CREATED, cLang);
 				return;
-	        }
-						        
+	     }
 
-	        
-	        
-	        // vamos con la tercera fase, los actores de una película
-	        // el bucle Y recorre todas las películas
-	        
-	        Pelicula pelActual;
-	        
-	        for (int y=0; y < pPeliculas.size(); y++) {
-	        	
+
+
+
+	        // vamos con la tercera fase, los cast de una movie en un year
+	        // el bucle Y recorre todos las movies
+
+	        Movie movieActual;
+
+	        for (int y=0; y < pMovies.size(); y++) {
+
 		        	indent = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-		        	
-		        	pelActual = pPeliculas.get(y);
-		        	
-		    		// pedimos los actores de esa película de ese año de sintprof
-		       	 
-		    		ArrayList<Actor> pActores;
-		    		try {
-		    			pActores = requestActoresPelicula("sintprof", CommonMMLChecker.servicioProf, anioActual, pelActual.getTitulo(), CommonSINT.PASSWD);
-					out.println("<h4>"+indent+anioActual+"+"+pelActual.getTitulo()+": "+pActores.size()+"  OK</h4>");
-		    		}
-		    		catch (ExcepcionSINT e) { 
-		    			out.println("<h4 style='color: red'>sintprof (ExcepcionSINT pidiendo actores): "+e.toString()+"</h4>");
-		    			CommonSINT.printEndPageChecker(out,  "0", esProfesor, CommonMML.CREATED);
-		    			return;
-		            }
-		    	            	          
-		            
-		            
-	            // vamos con la cuarta fase, la filmografía de un actor en una película de un año
-	            // el bucle Z recorre todos los actores
-		            
-	            	Actor actActual;
-	            	
-		        for (int z=0; z < pActores.size(); z++) {
-			        	indent = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-			        	
-			        	actActual = pActores.get(z);
-		            			
-		        		// pedimos la filmografía de ese actor de sintprof
-		           	 
-			    		Filmografia pFilm;
-			    		
-		        		try {
-		        			pFilm = requestFilmografiaActor("sintprof", CommonMMLChecker.servicioProf, anioActual, pelActual.getTitulo(), actActual.getNombre(), CommonSINT.PASSWD);
-						out.println("<h4>"+indent+anioActual+"+"+pelActual.getTitulo()+"+"+actActual.getNombre()+": "+pFilm.getFilms().size()+"  OK</h4>");
-		        		}
-		        		catch (ExcepcionSINT ex) { 
-		        			out.println("<h4 style='color: red'>sintprof (ExcepcionSINT pidiendo filmografía): "+ex.toString()+"</h4>");
-		        			CommonSINT.printEndPageChecker(out,  "0", esProfesor, CommonMML.CREATED);
-		        			return;
-		                }	        		        		
-		            
-		        } // for z
-	            
-	        } // for y
-	         
-	    } // for x
-	    
-		
-		out.println("<h4>sintprof: Todo OK</h4>");
-			
-		CommonSINT.printEndPageChecker(out,  "0", esProfesor, CommonMML.CREATED);
-	}
-	
-	
 
-	
-	
-	
-	
-	
+		        	movieActual = pMovies.get(y);
+
+		    		// pedimos los cast de esa movie de ese year de sintprof
+					// aplicamos un URLencode por si el valor tiene caracteres no ASCII
+					// no es el caso de year
+					// puede ser el caso de movie
+
+					try {
+		    		    qs = "?auto=true&"+CommonSINT.PFASE+"="+Query1.F3+"&"+NAMEP1+"="+URLEncoder.encode(yearActual, "utf-8")+"&"+NAMEP2+"="+URLEncoder.encode(movieActual.getTitle(), "utf-8")+"&p="+CommonSINT.PPWD;
+						call = CommonMMLChecker.servicioProf+qs;
+					}
+					catch (UnsupportedEncodingException ex) {
+						out.println("<h4 style='color: red'>"+currentMethod+": UnsupportedEncodingException pidiendo "+Query1.R3P+" a sintprof: UTF-8 no soportado</h4>");
+						CommonSINT.printEndPageChecker(out,  "0", esProfesor, MsMMLCh.CREATED, cLang);
+						return;
+					}
+
+		    		ArrayList<Cast> pCasts;
+		    		try {
+		    			pCasts = requestCastsMovieYear(call, cLang);
+		    			out.println("<h4>"+indent+yearActual+"+"+movieActual.getTitle()+": "+pCasts.size()+"  OK</h4>");
+		    			Cast castActual;
+						for (int z=0; z < pCasts.size(); z++) {
+								castActual = pCasts.get(z);
+								out.println("<h4>"+indent+yearActual+"+"+movieActual.getTitle()+"+"+castActual.getName()+":   OK</h4>");
+						}
+		    		}
+		    		catch (ExcepcionChecker e) {
+						cf = e.getCheckerFailure();
+		    			out.println("<h4 style='color: red'>"+currentMethod+": ExcepcionChecker pidiendo "+Query1.R3P+" a sintprof: <br>");
+						out.println(cf.toHTMLString());
+		    			out.println("</h4>");
+		    			CommonSINT.printEndPageChecker(out,  "0", esProfesor, MsMMLCh.CREATED, cLang);
+		    			return;
+		        }
+
+
+	        } // for y
+
+	    } // for x
+
+
+		out.println("<h4>sintprof: Todo OK</h4>");
+
+		CommonSINT.printEndPageChecker(out,  "0", esProfesor, MsMMLCh.CREATED, cLang);
+	}
+
+
+
+
+
+
+
+
 	// COMPROBACIÓN DEL SERVICIO DE UN ÚNICO ESTUDIANTE
 
 	// pantalla para ordenar comprobar un estudiante (se pide su número de login)
 	// debería unificarse en uno sólo con el de la consulta 2, son casi iguales
 
-	public static void doGetC1CorrectOneForm (HttpServletRequest request, PrintWriter out, int esProfesor)
+	public static void doGetC1CorrectOneForm (HttpServletRequest request, HttpServletResponse response, String cLang, int esProfesor)
 						throws IOException
 	{
+		PrintWriter out = response.getWriter();
+
 		out.println("<html>");
-		CommonMMLChecker.printHead(out);
-		
+		CommonMMLChecker.printHead(out, cLang);
+
 		out.println("<script>");
 
 		out.println("function stopEnter (event) {");
-		out.println("var x = event.which;");	
-		out.println("if (x === 13) {event.preventDefault();}");
+		out.println("var x = event.which;");
+		out.println("if (x === 13) {event.preventDefault();}");  // 13 es el ENTER
 		out.println("}");
-		
+
 		out.println("function hideservice () {");
-		out.println("var serviceAluElem = document.getElementById('serviceAluInput');");	
+		out.println("var serviceAluElem = document.getElementById('serviceAluInput');");
 		out.println("serviceAluElem.style.visibility='hidden';");
 		out.println("var sendButton = document.getElementById('sendButton');");
 		out.println("sendButton.disabled=true;");
@@ -253,495 +294,657 @@ public class Query1 {
 
 		out.println("var inputServiceElem = document.getElementById('serviceAluInput');");
 
-		out.println("inputServiceElem.value = 'http://"+CommonMMLChecker.server_port+"/sint'+inputSint+'"+CommonMMLChecker.SERVICE_NAME+"';");	
+		out.println("inputServiceElem.value = 'http://"+CommonMMLChecker.server_port+"/sint'+inputSint+'"+CommonMMLChecker.SERVICE_NAME+"';");
 		out.println("inputServiceElem.style.visibility='visible';");
 		out.println("}");
 		out.println("</script>");
-	
-		CommonMMLChecker.printBodyHeader(out);
-		
-		out.println("<h2>Consulta 1</h2>");                               // consulta 1
-		out.println("<h3>Corrección de un único servicio</h3>");
-		
-		out.println("<form>");
-		out.println("<input type='hidden' name='screenP' value='121'>");  // conduce a doGetC1CorrectOneReport
 
-		out.println("Introduzca el número de la cuenta SINT a comprobar: ");
+		CommonMMLChecker.printBodyHeader(out, cLang);
+
+		out.println("<h2>"+MsCC.getMsg(MsCC.CC03,cLang)+" 1</h2>");   // CC03=Consulta     CAMBIAR 1
+		out.println("<h3>"+MsCC.getMsg(MsCC.CC04,cLang)+"</h3>");   // CC04 = corrigiendo un servicio
+
+		out.println("<form>");
+		out.println("<input type='hidden' name='screenP' value='121'>");  // conduce a doGetC1CorrectOneReport --> CAMBIAR 221
+
+		out.println(MsCC.getMsg(MsCC.CC05,cLang)); // CC05 = "Introduzca el número de la cuenta SINT a comprobar: "
 		out.println("<input id='inputSint' type='text' name='alumnoP' size='3' onfocus='hideservice();' onblur='showservice();' onkeypress='stopEnter(event);' pattern='[1-9]([0-9]{1,2})?' required> <br>");
 
-		out.println("URL del servicio del alumno:");
+		out.println(MsCC.getMsg(MsCC.CC06,cLang)); // CC06 = "URL del servicio del alumno: "
 		out.println("<input style='visibility: hidden' id='serviceAluInput' type='text' name='servicioAluP' value='' size='40'><br>");
-		
+
 		if (esProfesor == 0) {
-			out.println("<p>Passwd de la cuenta (10 letras o números) <input id='passwdAlu' type='text' name='passwdAlu'  pattern='[A-Za-z0-9]{10}?' required> <br><br>");
+			// CC07 = "Passwd del servicio (10 letras o números): "
+			out.println("<p>"+MsCC.getMsg(MsCC.CC07,cLang)+" <input id='passwdAlu' type='text' name='passwdAlu'  pattern='[A-Za-z0-9]{10}?' required> <br><br>");
 		}
 		else {
-			out.println("<p><input type='hidden' name='p' value='si'>");	
+			out.println("<p><input type='hidden' name='p' value='si'>");
 		}
 
-		out.println("<p><input class='enviar' id='sendButton' disabled='true' type='submit' value='Enviar'>");
+		out.println("<p><input class='enviar' id='sendButton' disabled='true' type='submit' value='"+MsCP.getMsg(MsCP.CPC00,cLang)+"'>");  //CPC00=Enviar
 		out.println("</form>");
 
 		out.println("<form>");
-		if (esProfesor == 1) 
-			out.println("<p><input type='hidden' name='p' value='si'>");	
-		out.println("<p><input class='home'  type='submit' value='Inicio'>");
+		if (esProfesor == 1)
+			out.println("<p><input type='hidden' name='p' value='si'>");
+		out.println("<p><input class='home'  type='submit' value='"+MsCP.getMsg(MsCP.CPC01,cLang)+"'>");  //CPC01=Inicio
 		out.println("</form>");
-		
-		CommonSINT.printFoot(out, CommonMML.CREATED);
+
+		CommonSINT.printFoot(out, MsMMLCh.CREATED);
 
 		out.println("</body></html>");
 	}
 
 
 
-	
-	
-	
+
+
+
 	// pantalla para informar de la corrección de un sintX (se recibe en 'alumnoP' su número de login X)
 	// también recibe en servicioAlu el URL del servicio del alumno
 
-	public static void doGetC1CorrectOneReport(HttpServletRequest request, PrintWriter out, int esProfesor)
+	public static void doGetC1CorrectOneReport(HttpServletRequest request, HttpServletResponse response, String cLang, int esProfesor)
 						throws IOException, ServletException
-	{	
+	{
+		String prevFase = "12"; // Esta pantalla es la 121  --> CAMBIAR en C2 a 22
+		
+		String currentMethod = Thread.currentThread().getStackTrace()[1].getMethodName();
+
+		PrintWriter out = response.getWriter();
+
 		out.println("<html>");
-		CommonMMLChecker.printHead(out);
-		CommonMMLChecker.printBodyHeader(out);
-		
-		out.println("<h2>Consulta 1</h2>");
-		out.println("<h3>Corrección de un único servicio</h3>");
-		
+		CommonMMLChecker.printHead(out, cLang);
+		CommonMMLChecker.printBodyHeader(out, cLang);
+
+		out.println("<h2>"+MsCC.getMsg(MsCC.CC03,cLang)+" 1</h2>");  // CC03=Consulta 1
+		out.println("<h3>"+MsCC.getMsg(MsCC.CC04,cLang)+"</h3>");  // CC04 = corrigiendo un servicio
+
 		// leemos los datos del estudiante
-		
+
 		String alumnoP = request.getParameter("alumnoP");
 		String servicioAluP = request.getParameter("servicioAluP");
-		
+
 		if ((alumnoP == null) || (servicioAluP == null)) {
-			out.println("<h4 style='color: red'>Falta uno de los parámetros</h4>");  // si falta algún parámetro no se hace nada
-			CommonSINT.printEndPageChecker(out,  "12", esProfesor, CommonMML.CREATED);
-			return; 
+			out.println("<h4 style='color: red'>"+currentMethod+": "+MsCC.getMsg(MsCC.CC40, cLang)+"</h4>");  // CC40 = falta uno de los parámetros (alumnoP, servicioAluP)
+			CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
+			return;
 		}
-		
-		
+
 		String usuario="sint"+alumnoP;
 		String passwdAlu, passwdRcvd;
+
 
 
 		try {
 			passwdAlu = CommonMMLChecker.getAluPasswd(usuario);
 		}
-		catch (ExcepcionSINT ex) {
-			if (ex.getMessage().equals("NOCONTEXT"))
-				out.println("<h4 style='color: red'>Todavía no se ha creado el contexto de "+usuario+"</h4>"); 
-			else 
-				out.println("<h4 style='color: red'>"+ex.getMessage()+": Imposible recuperar la passwd del contexto de "+usuario+"</h4>"); 
-			CommonSINT.printEndPageChecker(out,  "12", esProfesor, CommonMML.CREATED);
-			return; 
+		catch (ExcepcionChecker ex) {
+			String codigo = ex.getCheckerFailure().getCodigo();
+			if (codigo.equals("NOCONTEXT"))
+				out.println("<h4 style='color: red'>"+currentMethod+": ExcepcionChecker: "+MsCC.getMsg(MsCC.CC39,cLang)+usuario+"</h4>"); // CC39 = Todavía no se ha creado el contexto del usuario, o este fue eliminado tras un error
+			else
+				out.println("<h4 style='color: red'>"+currentMethod+": ExcepcionChecker: "+MsCC.getMsg(MsCC.CC41,cLang)+usuario+"</h4>"); // CC41 = "Imposible recuperar la passwd del contexto de "
+			CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
+			return;
 		}
-		
+
 		if (esProfesor == 0) {  // lo está probando un alumno, es obligatorio que haya introducido su passwd
 			passwdRcvd = request.getParameter("passwdAlu");   // leemos la passwd del alumno del parámetro
-			
+
 			if (passwdRcvd == null) {
-				out.println("<h4 style='color: red'>No se ha recibido la passwd de "+usuario+"</h4>"); 
-				CommonSINT.printEndPageChecker(out,  "12", esProfesor, CommonMML.CREATED);
-				return; 
+				out.println("<h4 style='color: red'>"+currentMethod+": "+MsCC.getMsg(MsCC.CC42,cLang)+usuario+"</h4>");  // CC42 = No se ha recibido la passwd de
+				CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
+				return;
 			}
-			
+
 			if (!passwdAlu.equals(passwdRcvd)) {
-				out.println("<h4 style='color: red'>La passwd proporcionada no coincide con la almacenada en el sistema para "+usuario+"</h4>"); 
-				CommonSINT.printEndPageChecker(out,  "12", esProfesor, CommonMML.CREATED);
-				return; 
+				// CC10 = "La passwd proporcionada no coincide con la almacenada en el sistema para "
+				out.println("<h4 style='color: red'>"+currentMethod+": "+MsCC.getMsg(MsCC.CC10,cLang)+usuario+"</h4>");
+				CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
+				return;
 			}
-			
+
 		}
-		
-		out.println("<h3>Comprobando el servicio del usuario "+usuario+" ("+servicioAluP+")</h3>");
-		
-		String oneCheckStatus;  // para leer el Status de profesor y alumno
 
-		// doOneCheckUpStatus: hace una petición de estado al servicio del profesor y alumno para ver si están operativos
-
-		oneCheckStatus = CommonMMLChecker.doOneCheckUpStatus(request, "sintprof", CommonSINT.PASSWD);
-		String statusCode = oneCheckStatus.substring(0,oneCheckStatus.indexOf(','));
-		String statusPhrase = oneCheckStatus.substring (oneCheckStatus.indexOf(',')+1);
+		out.println("<h3>"+MsCC.getMsg(MsCC.CC08,cLang)+usuario+" ("+servicioAluP+")</h3>");  // CC08 = comprobando el servicio del usuario X
 
 
-		if (!statusCode.equals("OK")) {
-			out.println("<h4 style='color: red'>sintprof (error al preguntar por el estado): "+statusPhrase+"</h4>");
-			CommonSINT.printEndPageChecker(out,  "12", esProfesor, CommonMML.CREATED);
+		// doOneCheckUpStatus: hace una petición de estado al servicio del profesor para ver si está operativo
+
+		try {
+			CommonMMLChecker.doOneCheckUpStatus(request, "sintprof", CommonSINT.PPWD, cLang);
+		}
+		catch (ExcepcionChecker e) {
+			CheckerFailure cf = e.getCheckerFailure();
+			out.println("<h4 style='color: red'>"+currentMethod+": ExcepcionChecker: "+MsCC.getMsg(MsCC.CC43,cLang)+"<br>"); // CC43 = Error al preguntar por el estado de la práctica del profesor
+			out.println(cf.toHTMLString());
+			out.println("</h4>");
+			CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
 			return;
 		}
-		
-		oneCheckStatus = CommonMMLChecker.doOneCheckUpStatus(request, usuario, passwdAlu);  
-		statusCode = oneCheckStatus.substring(0,oneCheckStatus.indexOf(','));
-		statusPhrase = oneCheckStatus.substring (oneCheckStatus.indexOf(',')+1);
 
-		if (!statusCode.equals("OK")) {
-			out.println("<h4 style='color: red'>"+usuario+" (error al preguntar por el estado): "+statusPhrase+"</h4>");
-			CommonSINT.printEndPageChecker(out,  "12", esProfesor, CommonMML.CREATED);
+
+		try {
+			Query1.correctC1OneStudent(request, usuario, alumnoP, servicioAluP, passwdAlu, cLang);
+		}
+		catch (ExcepcionChecker e) {
+			CheckerFailure cf = e.getCheckerFailure();
+			out.println("<h4 style='color: red'>"+currentMethod+": "+MsCC.getMsg(MsCC.CC11,cLang)+usuario+" <br>"); // CC11 = "Resultado incorrecto comprobando el servicio de "
+			out.println(cf.toHTMLString());
+			out.println("</h4>");
+			CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
 			return;
 		}
-		
-		out.println("<h3>El servicio está en estado operativo </h3>");
 
-		// todas las comprobaciones preliminares están bien, vamos a pedir las consultas
+		out.println("<h3>"+MsCC.getMsg(MsCC.CC09,cLang)+"OK</h3>"); // CC09 = "Resultado: "
 
-		CommonMMLChecker.logMMLChecker("Comprobaciones preliminares OK");
-		
-		
-		// el resultado será 'OK' o una descripción de la diferencia encontrada (termina al encontrar una diferencia)
-		
-		String resultado = Query1.correctC1OneStudent(usuario, servicioAluP, passwdAlu);
-		
-		out.println("<h3>Resultado: "+resultado+"</h3>");
-	
+
+
 		// terminamos con botones Atrás e Inicio
 
-		CommonSINT.printEndPageChecker(out,  "12", esProfesor, CommonMML.CREATED);
+		CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
 	}
-	
-	
-	
-	
+
+
+
+
 	// método que corrige la consulta 1 de un estudiante
 
-	private static String correctC1OneStudent (String usuario, String servicioAluP, String passwdAlu) 
+    private static void correctC1OneStudent (HttpServletRequest request,String usuario, String aluNum, String servicioAluP, String passwdAlu, String cLang)
+    			throws ExcepcionChecker
 	{
-		String resultComp;
-		
-		// para la consulta directa final, vamos a escoger anio, película y actor al azar y a guardarlas en esas variables
-		
+    	CheckerFailure cf;
+		String currentMethod = Thread.currentThread().getStackTrace()[1].getMethodName();
+
+		// para la consulta directa final, vamos a escoger degree y subject al azar y a guardarlos en esas variables
+
 		SintRandom.init(); // inicializamos el generador de números aleatorios
 		int posrandom;
-		
-		String dqAnio="";
-		String dqPelicula="";
-		String dqActor="";
-		
-		
-		// empezamos por comprobar los errores
-		
-		String resultErrores = CommonMMLChecker.comparaErrores(usuario, servicioAluP, passwdAlu);
-		
-		if (!resultErrores.equals("OK")) 
-			return resultErrores;
 
-		
-		
-		
+		String dqYear="";
+		String dqMovie="";
+
+		// empezamos por comprobar los ficheros
+
+		try {
+			CommonMMLChecker.doOneCheckUpFiles(aluNum, "1", cLang);  // 1 es el número de la consulta  CAMBIAR a 2 en C2
+		}
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsCC.getMsg(MsCC.CC12,cLang));  // CC12 = "Error en los ficheros fuente"
+			throw new ExcepcionChecker(cf);
+		}
+
+
+        // ahora comprobamos que el servicio está operativo
+
+		try {
+			CommonMMLChecker.doOneCheckUpStatus(request, usuario, passwdAlu, cLang);
+		}
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsCC.getMsg(MsCC.CC13,cLang));  // CC13 = "Error al comprobar si el servicio del estudiante está operativo"
+			throw new ExcepcionChecker(cf);
+		}
+
+
+
+
+
+		// ahora comprobamos los errores
+
+/* Los alumnos no implementan la consulta de los errores en C1 2021-2022
+
+		try {
+			CommonMMLChecker.comparaErrores(usuario, servicioAluP, passwdAlu, cLang);
+		}
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			cf.setCodigo("20_DIFS");
+			cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsCC.getMsg(MsCC.CC14,cLang));  // CC14 = "Diferencias en la lista de errores"
+			throw new ExcepcionChecker(cf);
+		}
+*/
+
+
+
 		// y ahora todas y cada una de las consultas
-		
-		// pedimos la lista de años de sintprof
-	 
-		ArrayList<String> pAnios;
+
+		// pedimos la lista de years de sintprof
+
+		String qs = "?auto=true&"+CommonSINT.PFASE+"="+Query1.F1+"&p="+CommonSINT.PPWD;
+		String call = CommonMMLChecker.servicioProf+qs;
+
+		ArrayList<String> pYears;
 		try {
-			pAnios = Query1.requestAnios("sintprof", CommonMMLChecker.servicioProf, CommonSINT.PASSWD);
+			pYears = Query1.requestYears(call, cLang);
 		}
-		catch (Exception ex) { return "<br>Excepción solicitando la lista de años a sintprof:<br> "+ex.toString(); }
-	
-	
-		// pedimos la lista de anios del sintX
-		
-		ArrayList<String> xAnios;
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			cf.setCodigo("20_DIFS");
+			cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML21,cLang)+Query1.R1P+" (sintprof)"); // error solicitando lista de
+			throw new ExcepcionChecker(cf);
+		}
+
+
+		// pedimos la lista de years del sintX
+
+		qs = "?auto=true&"+CommonSINT.PFASE+"="+Query1.F1+"&p="+passwdAlu;
+		call = servicioAluP+qs;
+
+		ArrayList<String> xYears;
 		try {
-			xAnios = Query1.requestAnios(usuario, servicioAluP, passwdAlu);
+			xYears = Query1.requestYears(call, cLang);
 		}
-		catch (Exception ex) { return "<br>Excepción solicitando la lista de años a "+usuario+":<br> "+ ex.toString(); }
-	
-		
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			cf.setCodigo("20_DIFS");
+			cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML21,cLang)+Query1.R1P+" ("+usuario+")");  // error solicitando lista de
+			throw new ExcepcionChecker(cf);
+		}
+
+
 		// comparamos las listas de sintprof y sintX
-		
-		resultComp = Query1.comparaAnios(usuario, pAnios, xAnios);
-		
-		if (!resultComp.equals("OK")) 
-			return resultComp;
-		
-		CommonMMLChecker.logMMLChecker("Listas de años iguales");
-		
-	    
-		// las listas de años son iguales
-		// elegimos un año al azar para la consulta directa final
-	    
-		posrandom = SintRandom.getRandomNumber(0, pAnios.size()-1);
-		dqAnio = pAnios.get(posrandom);
-	    
-		
-		
-	    
-		// vamos con la segunda fase, las películas de cada año
-		// el bucle X recorre todos los años
-		
-		
-		String anioActual;
-	     
-		for (int x=0; x < pAnios.size(); x++) {
-	    	
-			anioActual = pAnios.get(x);
-			
-			// pedimos las películas de ese año de sintprof
-	   	 
-			ArrayList<Pelicula> pPeliculas;
+
+		try {
+		     Query1.comparaYears(usuario, pYears, xYears, cLang);
+		}
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			cf.setUrl(call);
+			cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML22,cLang)+Query1.R1P);  // diferencias en la lista de
+			throw new ExcepcionChecker(cf);
+		}
+
+
+
+		// las listas de years son iguales
+		// elegimos un year al azar para la consulta directa final
+
+		posrandom = SintRandom.getRandomNumber(0, pYears.size()-1);
+		dqYear = pYears.get(posrandom);
+
+
+
+
+		// vamos con la segunda fase, las movies de cada year
+		// el bucle X recorre todos los years
+
+
+		String yearActual;
+
+		for (int x=0; x < pYears.size(); x++) {
+
+			yearActual = pYears.get(x);
+
+			// pedimos las movies de ese year de sintprof
+		  // aplicamos URLencode por si hay caracteres no ASCII
+			// no es el caso de year
+
 			try {
-				pPeliculas = requestPeliculasAnio("sintprof", CommonMMLChecker.servicioProf, anioActual, CommonSINT.PASSWD);
+					qs = "?auto=true&"+CommonSINT.PFASE+"="+Query1.F2+"&"+NAMEP1+"="+URLEncoder.encode(yearActual, "utf-8")+"&p="+CommonSINT.PPWD;
+					call = CommonMMLChecker.servicioProf+qs;
 			}
-			catch (Exception ex) { return "<br>Excepción solicitando la lista de películas a sintprof:<br> "+ex.toString(); }
-		
-			
-			// pedimos las películas de ese año del sintX
-			
-			ArrayList<Pelicula> xPeliculas;
+		  catch (UnsupportedEncodingException ex) {
+				CommonMMLChecker.logCall(call);
+
+				cf = new CheckerFailure(call, "20_DIFS", ex.toString());
+				cf.addMotivo(currentMethod+": UnsupportedEncodingException: "+MsMMLCh.getMsg(MsMMLCh.CMML23,cLang)+Query1.R2P+" (sintprof)");  // error creando solicitud lista de
+				throw new ExcepcionChecker(cf);
+			}
+
+			ArrayList<Movie> pMovies;
 			try {
-				xPeliculas = requestPeliculasAnio(usuario, servicioAluP, anioActual, passwdAlu);
+				pMovies = requestMoviesYear(call, cLang);
 			}
-			catch (Exception ex) { return "<br>Excepción solicitando la lista de películas a "+usuario+":<br> "+ex.toString(); }			
-			
-			
+			catch (ExcepcionChecker e) {
+				cf = e.getCheckerFailure();
+				cf.setCodigo("20_DIFS");
+				cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML21,cLang)+Query1.R2P+" - "+yearActual+" (sintprof)"); // error solicitando lista de
+				throw new ExcepcionChecker(cf);
+			}
+
+
+			// pedimos las movies de ese year del sintX
+			// aplicamos URLencode por si hay caracteres no ASCII
+			// no es el caso de year
+
+			try {
+			   qs = "?auto=true&"+CommonSINT.PFASE+"="+Query1.F2+"&"+NAMEP1+"="+URLEncoder.encode(yearActual, "utf-8")+"&p="+passwdAlu;
+				 call = servicioAluP+qs;
+			}
+			catch (UnsupportedEncodingException ex) {
+				 CommonMMLChecker.logCall(call);
+
+ 				 cf = new CheckerFailure(call, "20_DIFS", ex.toString());
+ 				 cf.addMotivo(currentMethod+": UnsupportedEncodingException: "+MsMMLCh.getMsg(MsMMLCh.CMML23,cLang)+Query1.R2P+" - "+yearActual+" ("+usuario+")"); // error creando solicitud lista de
+ 				 throw new ExcepcionChecker(cf);
+			}
+
+			ArrayList<Movie> xMovies;
+			try {
+				xMovies = requestMoviesYear(call, cLang);
+			}
+			catch (ExcepcionChecker e) {
+				cf = e.getCheckerFailure();
+				cf.setCodigo("20_DIFS");
+				cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML21,cLang)+Query1.R2P+" - "+yearActual+" ("+usuario+")");  // error solicitando lista de
+				throw new ExcepcionChecker(cf);
+			}
+
+
 			// comparamos las listas de sintprof y sintX
-			
-			resultComp = Query1.comparaPeliculas(usuario, anioActual, pPeliculas, xPeliculas);
-			
-			if (!resultComp.equals("OK")) 
-				return resultComp;
-	       	       
-			CommonMMLChecker.logMMLChecker("Año: "+anioActual+" ---> Listas de películas iguales");
-	        
-	        // las listas de películas para este año son iguales
-		    // si este año es el de la consulta directa final, elegimos una película al azar para la consulta directa final
-	        
-	        
-	        if (anioActual.equals(dqAnio)) {
-	            posrandom = SintRandom.getRandomNumber(0, pPeliculas.size()-1);
-	            Pelicula pPel = pPeliculas.get(posrandom);
-	          	dqPelicula = pPel.getTitulo();
+
+			try {
+				Query1.comparaMovies(usuario, yearActual, pMovies, xMovies, cLang);
+			}
+			catch (ExcepcionChecker e) {
+				cf = e.getCheckerFailure();
+				cf.setUrl(call);
+				cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML22,cLang)+Query1.R2P+" ("+yearActual+")"); // diferencias en la lista de
+				throw new ExcepcionChecker(cf);
+			}
+
+
+
+			// las listas de movies para este year son iguales
+		    // si este year es el de la consulta directa final, elegimos una movie al azar para la consulta directa final
+
+
+	        if (yearActual.equals(dqYear)) {
+	            posrandom = SintRandom.getRandomNumber(0, pMovies.size()-1);
+	            Movie pMov = pMovies.get(posrandom);
+	          	dqMovie = pMov.getTitle();
 	        }
-	        
-	        
-	        
-	        // vamos con la tercera fase, los actores de una película
-	        // el bucle Y recorre todas las películas
-	        
-	        Pelicula pelActual;
-	        
-	        for (int y=0; y < pPeliculas.size(); y++) {
-	        	
-		        	pelActual = pPeliculas.get(y);
-		        	
-		    		// pedimos los actores de esa película de ese año de sintprof
-		       	 
-		    		ArrayList<Actor> pActores;
-		    		try {
-		    			pActores = requestActoresPelicula("sintprof", CommonMMLChecker.servicioProf, anioActual, pelActual.getTitulo(), CommonSINT.PASSWD);
-		    		}
-		    		catch (ExcepcionSINT ex) { return "<br>ExcepcionSINT solicitando la lista de actores a sintprof:<br> "+ex.toString(); }
-		    		
-		    		
-		    		// pedimos los actores de esa película de ese año del sintX
-		    		
-		    		ArrayList<Actor> xActores;
-		    		try {
-		    			xActores = requestActoresPelicula(usuario, servicioAluP, anioActual, pelActual.getTitulo(), passwdAlu);
-		    		}
-		    		catch (ExcepcionSINT ex) { return "<br>ExcepcionSINT solicitando la lista de actores a "+usuario+":<br> "+ex.toString(); }
-		    		
-		    		
-		    		// comparamos las listas de sintprof y sintX
-		    		
-				resultComp = Query1.comparaActores(usuario, anioActual, pelActual.getTitulo(), pActores, xActores);
-				
-				if (!resultComp.equals("OK")) 
-					return resultComp;
-	            
-				CommonMMLChecker.logMMLChecker("Listas de actores iguales");
-				
-	            
-	            // las listas de actores de esta película son iguales
-	            // si esta película es la de la consulta directa final, elegimos un actor al azar para la consulta directa final
-	            
-	            if ( (anioActual.equals(dqAnio)) && (pelActual.getTitulo().equals(dqPelicula))) {
-		            posrandom = SintRandom.getRandomNumber(0, pActores.size()-1);
-		        	    dqActor = pActores.get(posrandom).getNombre();
-		        }
-	            
-	            
-	            // vamos con la cuarta fase, la filmografía de un actor de una película de un año
-	            // el bucle Z recorre todos los actores
-		            
-	            	Actor actorActual;
-	            	
-		        for (int z=0; z < pActores.size(); z++) {
-	            	
-		            	actorActual = pActores.get(z);
-		            			
-		        		// pedimos la filmografía de ese actor de sintprof
-		           	 
-		        		Filmografia pFilmografia;
-		        		
-		        		try {
-		        			pFilmografia = requestFilmografiaActor("sintprof", CommonMMLChecker.servicioProf, anioActual, pelActual.getTitulo(), actorActual.getNombre(), CommonSINT.PASSWD);
-		        		}
-		        		catch (ExcepcionSINT ex) { return "<br>ExcepcionSINT solicitando la filmografía a sintprof:<br> "+ex.toString(); }
-		        		
-		        		
-		        		// pedimos la filmografía de ese actor del sintX
-		        		
-		        		Filmografia xFilmografia;
-		        		try {
-		        			xFilmografia = requestFilmografiaActor(usuario, servicioAluP, anioActual, pelActual.getTitulo(), actorActual.getNombre(), passwdAlu);
-		        		}
-		        		catch (ExcepcionSINT ex) { return "<br>ExcepcionSINT solicitando la filmografía a "+usuario+":<br> "+ex.toString(); }
-		        			
-		        		
-		        		// comparamos las filmografías de sintprof y sintX
-		        		
-					resultComp = Query1.comparaFilmografias(usuario, anioActual, pelActual.getTitulo(), actorActual.getNombre(), pFilmografia, xFilmografia);
-					
-					if (!resultComp.equals("OK")) 
-						return resultComp;	    
-					
-					CommonMMLChecker.logMMLChecker("Filmografías iguales");
-	            
-	            } // for z
-	            
+
+
+
+	        // vamos con la tercera fase, los casts de una movie
+	        // el bucle Y recorre todas las movies
+
+	        Movie movieActual;
+
+	        for (int y=0; y < pMovies.size(); y++) {
+
+	        	movieActual = pMovies.get(y);
+
+	    		// pedimos los casts de esa movie de ese year de sintprof
+				// aplicamos URLencode por si hay caracteres no ASCII
+				// no es el caso de year
+				// pero sí puede ser con movie
+
+				try {
+	    		    qs = "?auto=true&"+CommonSINT.PFASE+"="+Query1.F3+"&"+NAMEP1+"="+URLEncoder.encode(yearActual, "utf-8")+"&"+NAMEP2+"="+URLEncoder.encode(movieActual.getTitle(), "utf-8")+"&p="+CommonSINT.PPWD;
+	    		    call = CommonMMLChecker.servicioProf+qs;
+				}
+				catch (UnsupportedEncodingException ex) {
+					CommonMMLChecker.logCall(call);
+
+	  				cf = new CheckerFailure(call, "20_DIFS", ex.toString());
+	  				cf.addMotivo(currentMethod+": UnsupportedEncodingException: "+MsMMLCh.getMsg(MsMMLCh.CMML23,cLang)+Query1.R3P+" (sintprof)"); // error creando solicitud lista de
+	  				throw new ExcepcionChecker(cf);
+				}
+
+	    		ArrayList<Cast> pCasts;
+	    		try {
+	    			pCasts = requestCastsMovieYear(call, cLang);
+	    		}
+	    		catch (ExcepcionChecker e) {
+	    			cf = e.getCheckerFailure();
+					cf.setCodigo("20_DIFS");
+					cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML21,cLang)+Query1.R3P+" (sintprof)");  // error solicitando lista de
+					throw new ExcepcionChecker(cf);
+	    		}
+
+
+	    		// pedimos los casts de esa movie de ese year del sintX
+				// aplicamos URLencode por si hay caracteres no ASCII
+				// no es el caso de year
+				// pero sí puede ser con movie
+
+				try {
+	    		   qs = "?auto=true&"+CommonSINT.PFASE+"="+Query1.F3+"&"+NAMEP1+"="+URLEncoder.encode(yearActual, "utf-8")+"&"+NAMEP2+"="+URLEncoder.encode(movieActual.getTitle(), "utf-8")+"&p="+passwdAlu;
+	    		   call = servicioAluP+qs;
+				}
+ 				catch (UnsupportedEncodingException ex) {
+					CommonMMLChecker.logCall(call);
+
+					cf = new CheckerFailure(call, "20_DIFS", ex.toString());
+					cf.addMotivo(currentMethod+": UnsupportedEncodingException: "+MsMMLCh.getMsg(MsMMLCh.CMML23,cLang)+Query1.R3P+" ("+usuario+")"); // error creando solicitud lista de
+					throw new ExcepcionChecker(cf);
+ 				}
+
+	    		ArrayList<Cast> xCasts;
+	    		try {
+	    			xCasts = requestCastsMovieYear(call, cLang);
+	    		}
+	    		catch (ExcepcionChecker e) {
+	    			cf = e.getCheckerFailure();
+					cf.setCodigo("20_DIFS");
+					cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML21,cLang)+Query1.R3P+" ("+usuario+")"); // error solicitando lista de
+					throw new ExcepcionChecker(cf);
+	    		}
+
+
+	    		// comparamos las listas de sintprof y sintX
+
+	    		try {
+	    			Query1.comparaCasts(usuario, yearActual, movieActual.getTitle(), pCasts, xCasts, cLang);
+				}
+				catch (ExcepcionChecker e) {
+					cf = e.getCheckerFailure();
+					cf.setUrl(call);
+					cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML22,cLang)+Query1.R3P+" ("+yearActual+", "+movieActual.getTitle()+")"); // diferencias en la lista de
+					throw new ExcepcionChecker(cf);
+				}
+
+
 	        } // for y
-	         
+
 	    } // for x
-	    
-	    
+
+
 		// finalmente la consulta directa
-		
-		String resultadoDQ = checkDirectQueryC1(CommonMMLChecker.servicioProf, usuario, servicioAluP, dqAnio, dqPelicula, dqActor, passwdAlu);
-		
-		if (!resultadoDQ.equals("OK")) 
-			return "Resultados erróneos en la consulta directa: "+resultadoDQ; 
-		
-		// si todas las consultas coincidieron, devuelve 'OK'
-	    return "OK";
+
+		try {
+			Query1.checkDirectQueryC1(CommonMMLChecker.servicioProf, usuario, servicioAluP, dqYear, dqMovie, passwdAlu, cLang);
+		}
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			cf.setCodigo("20_DIFS");
+			cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML24,cLang));  // resultado erróneo de la consuta directa
+			throw new ExcepcionChecker(cf);
+		}
+
+		// todas las consultas coincidieron
+
+	    return;
 	}
-	
-	
-	
 
-	
-	
 
-	
-	
-	// comprueba que las consultas directas son iguales   
-	
-	private static String checkDirectQueryC1(String servicioProf, String usuario, String servicioAluP, String anio, String pelicula, String actor, String passwdAlu) 
+
+
+
+
+
+
+
+	// comprueba que las consultas directas son iguales
+
+	private static void checkDirectQueryC1(String servicioProf, String usuario, String servicioAluP, String year, String movie, String passwdAlu, String cLang)
+		throws ExcepcionChecker
 	{
-		Filmografia pFilmografia, xFilmografia;
-			
+		String currentMethod = Thread.currentThread().getStackTrace()[1].getMethodName();
+		CheckerFailure cf;
+		ArrayList<Cast> pCasts, xCasts;
+		String qs="", call="";
 
 		// primero comprobamos que responde con el error apropiado si falta algún parámetro
-		
+
   		try {
-  			Query1.checkLackParam(usuario, servicioAluP, anio, pelicula, actor, passwdAlu);
+  			CommonMMLChecker.checkLackParam(servicioAluP, passwdAlu, Query1.F3, NAMEP1, year, NAMEP2, movie, cLang);
 		}
-		catch (ExcepcionSINT ex) { return "<br>ExcepcionSINT solicitando la consulta directa a: "+usuario+"<br> "+ex.toString(); }
-  		
-  		
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			cf.setCodigo("20_DIFS");
+			cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsCC.getMsg(MsCC.CC64,cLang));  // CC64 = "No responde correctamente si falta algún parámetro obligatorio"
+			throw new ExcepcionChecker(cf);
+		}
+
+
  		// ahora comprobamos que los resultados son correctos
-  		
-   		try {
-   			pFilmografia = Query1.requestFilmografiaActor("sintprof", CommonMMLChecker.servicioProf, anio, pelicula, actor, CommonSINT.PASSWD);
+
+		// pedimos la consulta a sintprof
+		// aplicamos URLencode por si hay caracteres no ASCII
+		// no es el caso de year
+		// pero sí puede ser con movie
+
+		try {
+		    qs = "?auto=true&"+CommonSINT.PFASE+"="+Query1.F3+"&"+NAMEP1+"="+URLEncoder.encode(year, "utf-8")+"&"+NAMEP2+"="+URLEncoder.encode(movie, "utf-8")+"&p="+CommonSINT.PPWD;
+				call = CommonMMLChecker.servicioProf+qs;
 		}
-		catch (ExcepcionSINT ex) { return "<br>ExcepcionSINT solicitando la consulta directa a sintprof:<br> "+ex.toString(); }
-   		
-  		try {
-   			xFilmografia = Query1.requestFilmografiaActor(usuario, servicioAluP, anio, pelicula, actor, passwdAlu);
+		catch (UnsupportedEncodingException ex) {
+			CommonMMLChecker.logCall(call);
+
+			cf = new CheckerFailure(call, "20_DIFS", ex.toString());
+			cf.addMotivo(currentMethod+": UnsupportedEncodingException: "+MsMMLCh.getMsg(MsMMLCh.CMML23,cLang)+Query1.R3P+" (sintprof)"); // error creando solicitud lista de
+			throw new ExcepcionChecker(cf);
 		}
-		catch (ExcepcionSINT ex) { return "<br>ExcepcionSINT solicitando la consulta directa:<br> "+ex.toString(); }
-   		
-   		
-		// comparamos las filmografías de sintprof y sintX
-		
-		String resultComp = Query1.comparaFilmografias(usuario, anio, pelicula, actor, pFilmografia, xFilmografia);
-		
-		if (!resultComp.equals("OK")) 
-			return "checkDirectQueryC1: "+resultComp;	    
-  	
-	
-		// si todo coincidió, devuelve 'OK'
-		
-		return "OK";
+
+		try {
+   			pCasts = Query1.requestCastsMovieYear(call, cLang);
+		}
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			cf.setCodigo("20_DIFS");
+			cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML26,cLang)+" (sintprof)");  // error pidiendo consulta directa
+			throw new ExcepcionChecker(cf);
+		}
+
+		// pedimos la consulta al sintX
+		// aplicamos URLencode por si hay caracteres no ASCII
+		// no es el caso de year
+		// pero sí puede ser con movie
+
+		try {
+		    qs = "?auto=true&"+CommonSINT.PFASE+"="+Query1.F3+"&"+NAMEP1+"="+URLEncoder.encode(year, "utf-8")+"&"+NAMEP2+"="+URLEncoder.encode(movie, "utf-8")+"&p="+passwdAlu;
+			call = servicioAluP+qs;
+		}
+		catch (UnsupportedEncodingException ex) {
+			CommonMMLChecker.logCall(call);
+
+			cf = new CheckerFailure(call, "20_DIFS", ex.toString());
+			cf.addMotivo(currentMethod+": UnsupportedEncodingException:"+MsMMLCh.getMsg(MsMMLCh.CMML23,cLang)+Query1.R3P+" ("+usuario+")"); // // error creando solicitud lista de
+			throw new ExcepcionChecker(cf);
+		}
+
+		try {
+  			xCasts = Query1.requestCastsMovieYear(call, cLang);
+		}
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			cf.setCodigo("20_DIFS");
+			cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML26,cLang)+" ("+usuario+")"); // error pidiendo consulta directa
+			throw new ExcepcionChecker(cf);
+		}
+
+
+		// comparamos las listas de casts resultado de sintprof y sintX
+
+		try {
+			Query1.comparaCasts(usuario, year, movie, pCasts, xCasts, cLang);
+		}
+		catch (ExcepcionChecker e) {
+			cf = e.getCheckerFailure();
+			cf.setUrl(call);
+			cf.addMotivo(currentMethod+": ExcepcionChecker: "+MsMMLCh.getMsg(MsMMLCh.CMML22,cLang)+Query1.R3P);  // Diferencias en la lista de
+			throw new ExcepcionChecker(cf);
+		}
+
+
+		// todo coincidió
+
+		return;
 	}
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
+
+
+
+
+
 	// COMPROBACIÓN DEL SERVICIO DE TODOS LOS ESTUDIANTES
 
 	// pantalla para comprobar todos los estudiantes, se pide el número de cuentas a comprobar (corregir su práctica)
 
-	public static void doGetC1CorrectAllForm (HttpServletRequest request, PrintWriter out)
+	public static void doGetC1CorrectAllForm (HttpServletRequest request, HttpServletResponse response, String cLang) throws IOException
 	{
+		PrintWriter out = response.getWriter();
 		int esProfesor = 1;
-		
+
 		out.println("<html>");
-		CommonMMLChecker.printHead(out);
-		CommonMMLChecker.printBodyHeader(out);
-		
+		CommonMMLChecker.printHead(out, cLang);
+		CommonMMLChecker.printBodyHeader(out, cLang);
+
 		out.println("<h2>Consulta 1</h2>");
 		out.println("<h3>Corrección de todos los servicios</h3>");
 
 		out.println("<form>");
-		out.println("<input type='hidden' name='screenP' value='131'>");
+		out.println("<input type='hidden' name='screenP' value='131'>"); // Canduce a doGetC1CorrectAllReport --> CAMBIAR a 231 para C2
 
 		out.println("Introduzca el número de cuentas SINT a corregir: ");
 		out.println("<input id='inputNumCuentas' type='text' name='numCuentasP' size='3' pattern='[1-9]([0-9]{1,2})?' required>");
 
-		if (esProfesor == 1) 
-			out.println("<p><input type='hidden' name='p' value='si'>");	
-		
-		out.println("<input class='enviar' type='submit' value='Enviar' >");   
+		if (esProfesor == 1)
+			out.println("<p><input type='hidden' name='p' value='si'>");
+
+		out.println("<input class='enviar' type='submit' value='"+MsCP.getMsg(MsCP.CPC00,cLang)+"' >");  //CPC00=Enviar
 		out.println("</form>");
 
 		out.println("<form>");
-		if (esProfesor == 1) 
-			out.println("<p><input type='hidden' name='p' value='si'>");	
-		out.println("<p><input class='home' type='submit' value='Inicio'>");
+		if (esProfesor == 1)
+			out.println("<p><input type='hidden' name='p' value='si'>");
+		out.println("<p><input class='home' type='submit' value='"+MsCP.getMsg(MsCP.CPC01,cLang)+"'>");  //CPC01=Inicio
 		out.println("</form>");
 
-		CommonSINT.printFoot(out, CommonMML.CREATED);
-		
+		CommonSINT.printFoot(out, MsMMLCh.CREATED);
+
 		out.println("</body></html>");
 	}
 
 
 
-	
+
 	// pantalla para corregir a todos los estudiantes
 	// presenta en pantalla diversas listas según el resultado de cada alumno
-	// se crea un fichero con el resultado de cada corrección (webapps/CORRECCIONES/sintX/fecha-corrección)  
+	// se crea un fichero con el resultado de cada corrección (webapps/CORRECCIONES/sintX/fecha-corrección)
 	// se devuelven enlaces a esos ficheros
-		
-	public static void doGetC1CorrectAllReport(HttpServletRequest request, PrintWriter out)
+
+	public static void doGetC1CorrectAllReport(HttpServletRequest request, HttpServletResponse response, String cLang)
 						throws IOException, ServletException
 	{
+		String prevFase = "13"; // Esta es la 231  --> CAMBIAR en C2 a 23
+		
+		PrintWriter out = response.getWriter();
 		int esProfesor = 1;
-		
+
 		out.println("<html>");
-		CommonMMLChecker.printHead(out);
-		CommonMMLChecker.printBodyHeader(out);
-		
-		out.println("<h2>Consulta 1</h2>");
+		CommonMMLChecker.printHead(out, cLang);
+		CommonMMLChecker.printBodyHeader(out, cLang);
+
+		out.println("<h2>Consulta 1</h2>");  // CAMBIAR a 2
 
 		// si no se recibe el parámetro con el número de cuentas no se hace nada
 
 		String numCuentasP = request.getParameter("numCuentasP");
 		if (numCuentasP == null) {
 			out.println("<h4>Error: no se ha recibido el número de cuentas</h4>");
-			CommonSINT.printEndPageChecker(out,  "13", esProfesor, CommonMML.CREATED);
+			CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
 			return;
 		}
 
@@ -752,39 +955,25 @@ public class Query1 {
 		}
 		catch (NumberFormatException e) {
 			out.println("<h4>Error: el número de cuentas recibido no es un número válido</h4>");
-			CommonSINT.printEndPageChecker(out,  "13", esProfesor, CommonMML.CREATED);
+			CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
 			return;
 		}
 
-		if (numCuentas < 1) {  
+		if (numCuentas < 1) {
 			out.println("<h4>Error: el número de cuentas recibido es menor que uno</h4>");
-			CommonSINT.printEndPageChecker(out,  "13", esProfesor, CommonMML.CREATED);
+			CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
 			return;
 		}
 
-		
-		
-		
+
+
+
+
 		// todos los parámetros están bien
-
-		String oneCheckStatus;  // para leer el Status de profesor y alumnos
-
-
-		// doOneCheckUpStatus: hace una petición de estado al servicio del profesor para ver si está operativo
-
-		oneCheckStatus = CommonMMLChecker.doOneCheckUpStatus(request, "sintprof", CommonSINT.PASSWD);
-		String statusCode = oneCheckStatus.substring(0,oneCheckStatus.indexOf(','));
-		String statusPhrase = oneCheckStatus.substring (oneCheckStatus.indexOf(',')+1);
-
-		if (!statusCode.equals("OK")) {
-			out.println("<h4 style='color: red'>sintprof (error status): "+statusPhrase+"</h4>");
-			CommonSINT.printEndPageChecker(out,  "13", esProfesor, CommonMML.CREATED);
-			return;
-		}
 
 
 		out.println("<h3>Corrección de todos los servicios ("+numCuentas+")</h3>");
-		
+
 
 		// listas para almacenar en qué caso está cada alumno
 
@@ -802,8 +991,9 @@ public class Query1 {
 		ArrayList<Integer> usersE9BadPasswd = new ArrayList<Integer>();    // la passwd es incorrecta
 		ArrayList<Integer> usersE10BadAnswer = new ArrayList<Integer>();    // la respuesta no es la esperada
 		ArrayList<Integer> usersE11NoPasswd = new ArrayList<Integer>();    // el usuario no tiene passwd
-		
-		ArrayList<Integer> usersDiff = new ArrayList<Integer>();	   // las peticiones del alumno tienen diferencias respecto a las del profesor
+		ArrayList<Integer> usersE12Files = new ArrayList<Integer>();    // el usuario no tiene passwd
+
+		ArrayList<Integer> usersE20Diff = new ArrayList<Integer>();	   // las peticiones del alumno tienen diferencias respecto a las del profesor
 
 		String servicioAlu;
 
@@ -819,16 +1009,16 @@ public class Query1 {
 		// si no existe, se crea el directorio de las CORRECCIONES
 
 		String correccionesPath = CommonMMLChecker.servletContextSintProf.getRealPath("/")+"CORRECCIONES";
-		
+
 		folder = new File(correccionesPath);
-		if (!folder.exists()) 
+		if (!folder.exists())
 			folder.mkdir();
 
 		// vamos a por las cuentas, de una en una
 
 		String sintUser;
 
-		bucle:	
+		bucle:
 		for (int x=1; x <= numCuentas; x++) {
 
 			sintUser="sint"+x;
@@ -836,7 +1026,7 @@ public class Query1 {
 			// si no existe, se crea el directorio del alumno
 
 			folder = new File(correccionesPath+"/"+sintUser);
-			if (!folder.exists()) 
+			if (!folder.exists())
 				folder.mkdir();
 
 			// se crea el fichero donde se almacenará esta corrección
@@ -849,16 +1039,18 @@ public class Query1 {
 
 
 			// Comienza la comprobación del alumno
-			
+
+
 			// leemos la passwd del alumno
-			
-		String passwdAlu;
-			
+
+		  String passwdAlu;
+
 			try {
 				passwdAlu = CommonMMLChecker.getAluPasswd(sintUser);
 			}
-			catch (ExcepcionSINT ex) {
-				if (ex.getMessage().equals("NOCONTEXT")) {
+			catch (ExcepcionChecker ex) {
+				String codigo = ex.getCheckerFailure().getCodigo();
+				if (codigo.equals("NOCONTEXT")) {
 					bw.write("No hay contexto");
 					usersE1NoContext.add(x);
 				}
@@ -867,102 +1059,91 @@ public class Query1 {
 					usersE11NoPasswd.add(x);
 				}
 				bw.close();
-				continue bucle; 
+				continue bucle;
 			}
-			
-		    
 
-			// primero comprobamos si el servicio está operativo
 
-			bw.write("Comenzando la comprobación de "+sintUser+"... Comprobando si el servicio está operativo");
-			bw.newLine();
+			servicioAlu = "http://"+CommonMMLChecker.server_port+"/"+sintUser+CommonMMLChecker.SERVICE_NAME;
 
-			// doOneCheckUpStatus: hace una petición de estado al servicio de cada alumno
+			try {
+				Query1.correctC1OneStudent(request, sintUser, Integer.toString(x), servicioAlu, passwdAlu, cLang);
+				bw.write("OK");
+				bw.close();
+				usersOK.add(x);
+			}
+			catch (ExcepcionChecker e) {
+				CheckerFailure cf = e.getCheckerFailure();
 
-			oneCheckStatus = CommonMMLChecker.doOneCheckUpStatus(request, sintUser, passwdAlu);
-			statusCode = oneCheckStatus.substring(0,oneCheckStatus.indexOf(','));
-			statusPhrase = oneCheckStatus.substring (oneCheckStatus.indexOf(',')+1);
+			    switch (cf.getCodigo()) {
 
-			switch (statusCode) {
-				case "OK":    // el servicio está operativo                                      
-					bw.write("El servicio está operativo");
-					bw.newLine();
-					break;
 				case "01_NOCONTEXT":   // el contexto no está declarado o no existe su directorio
-					bw.write(statusPhrase);
+					bw.write(cf.toString());
 					bw.close();
 					usersE1NoContext.add(x);
 					continue bucle;
 				case "02_FILENOTFOUND":   // el servlet no está declarado.
-					bw.write(statusPhrase);
+					bw.write(cf.toString());
 					bw.close();
 					usersE2FileNotFound.add(x);
 					continue bucle;
 				case "03_ENCODING":   // la secuencia de bytes recibida UTF-8 está malformada
-					bw.write(statusPhrase);
+					bw.write(cf.toString());
 					bw.close();
 					usersE3Encoding.add(x);
 					continue bucle;
 				case "04_IOEXCEPTION":    // la clase del servlet no está o produjo una excepción
-					bw.write(statusPhrase);
+					bw.write(cf.toString());
 					bw.close();
 					usersE4IOException.add(x);
 					continue bucle;
 				case "05_BF":   // la respuesta no es well-formed
-					bw.write(statusPhrase);
+					bw.write(cf.toString());
 					bw.close();
 					usersE5Bf.add(x);
 					continue bucle;
 				case "06_INVALID":   // la respuesta es inválida
-					bw.write(statusPhrase);
+					bw.write(cf.toString());
 					bw.close();
 					usersE6Invalid.add(x);
 					continue bucle;
 				case "07_ERRORUNKNOWN":   // error desconocido
-					bw.write(statusPhrase);
+					bw.write(cf.toString());
 					bw.close();
 					usersE7Error.add(x);
 					continue bucle;
 				case "08_OKNOPASSWD":   // responde bien incluso sin passwd
-					bw.write(statusPhrase);
+					bw.write(cf.toString());
 					bw.close();
 					usersE8OkNoPasswd.add(x);
 					continue bucle;
 				case "09_BADPASSWD":   // la passwd es incorrecta
-					bw.write(statusPhrase);
+					bw.write(cf.toString());
 					bw.close();
 					usersE9BadPasswd.add(x);
 					continue bucle;
 				case "10_BADANSWER":   // la respuesta es inesperada
-					bw.write(statusPhrase);
+					bw.write(cf.toString());
 					bw.close();
 					usersE10BadAnswer.add(x);
-					continue bucle;		
+					continue bucle;
+			    case "12_FILES":
+					bw.write(cf.toString());
+					bw.close();
+					usersE12Files.add(x);
+					continue bucle;
+				case "20_DIFS":
+					bw.write(cf.toString());
+					bw.close();
+					usersE20Diff.add(x);
+					continue bucle;
 				default:      // error desconocido
-					bw.write("Respuesta desconocida de doOneCheckUpStatus(): "+oneCheckStatus);
+					bw.write("Respuesta desconocida de la corrección:\n"+cf.toString());
 					bw.close();
 					usersE7Error.add(x);
 					continue bucle;
-			}
-
-
-			// el servicio del alumno está operativo, continuamos
-
-			servicioAlu = "http://"+CommonMMLChecker.server_port+"/"+sintUser+CommonMMLChecker.SERVICE_NAME;
-			
-			String resultado = Query1.correctC1OneStudent(sintUser, servicioAlu, passwdAlu);
-
-			bw.write("Comparando peticiones... ");
-			bw.write(resultado);
-			bw.newLine();
-			bw.close();
-			
-			if (!resultado.equals("OK") )
-				usersDiff.add(x);
-			else 
-				usersOK.add(x);
-			
-		}
+			   } // switch
+			}  // catch
+		} // for
 
 		// Breve resumen de los resultados por pantalla, con enlaces a los ficheros
 
@@ -979,17 +1160,27 @@ public class Query1 {
 			out.print("</h4>");
 		}
 
-		if (usersDiff.size() >0) { 	
-			out.print("<h4 style='color: red'>Servicios con diferencias respecto a los resultados esperados ("+usersDiff.size()+"): ");
-			for (int x=0; x < usersDiff.size(); x++) {
-				numAlu = usersDiff.get(x);
+		if (usersE12Files.size() >0) {
+			out.print("<h4 style='color: red'>Servicios con errores en los ficheros ("+usersE12Files.size()+"): ");
+			for (int x=0; x < usersE12Files.size(); x++) {
+				numAlu = usersE12Files.get(x);
 				fileAlu = usersCompareResultFile.get(numAlu-1);
 				out.print("<a href='?screenP=4&file="+fileAlu+"'>"+numAlu+"</a> ");
 			}
 			out.print("</h4>");
 		}
-		
-		if (usersE10BadAnswer.size() >0) { 	
+
+		if (usersE20Diff.size() >0) {
+			out.print("<h4 style='color: red'>Servicios con diferencias respecto a los resultados esperados ("+usersE20Diff.size()+"): ");
+			for (int x=0; x < usersE20Diff.size(); x++) {
+				numAlu = usersE20Diff.get(x);
+				fileAlu = usersCompareResultFile.get(numAlu-1);
+				out.print("<a href='?screenP=4&file="+fileAlu+"'>"+numAlu+"</a> ");
+			}
+			out.print("</h4>");
+		}
+
+		if (usersE10BadAnswer.size() >0) {
 			out.print("<h4 style='color: red'>Servicios que responden de forma inesperada ("+usersE10BadAnswer.size()+"): ");
 			for (int x=0; x < usersE10BadAnswer.size(); x++) {
 				numAlu = usersE10BadAnswer.get(x);
@@ -998,8 +1189,8 @@ public class Query1 {
 			}
 			out.print("</h4>");
 		}
-		
-		if (usersE9BadPasswd.size() >0) { 	
+
+		if (usersE9BadPasswd.size() >0) {
 			out.print("<h4 style='color: red'>Servicios que no reconocen la passwd ("+usersE9BadPasswd.size()+"): ");
 			for (int x=0; x < usersE9BadPasswd.size(); x++) {
 				numAlu = usersE9BadPasswd.get(x);
@@ -1008,8 +1199,8 @@ public class Query1 {
 			}
 			out.print("</h4>");
 		}
-		
-		if (usersE8OkNoPasswd.size() >0) { 	
+
+		if (usersE8OkNoPasswd.size() >0) {
 			out.print("<h4 style='color: red'>Servicios que responden bien sin necesidad de passwd ("+usersE8OkNoPasswd.size()+"): ");
 			for (int x=0; x < usersE8OkNoPasswd.size(); x++) {
 				numAlu = usersE8OkNoPasswd.get(x);
@@ -1019,7 +1210,7 @@ public class Query1 {
 			out.print("</h4>");
 		}
 
-		if (usersE6Invalid.size() >0) { 	
+		if (usersE6Invalid.size() >0) {
 			out.print("<h4 style='color: red'>Servicios con respuesta inválida a la solicitud de estado ("+usersE6Invalid.size()+"): ");
 			for (int x=0; x < usersE6Invalid.size(); x++) {
 				numAlu = usersE6Invalid.get(x);
@@ -1029,7 +1220,7 @@ public class Query1 {
 			out.print("</h4>");
 		}
 
-		if (usersE5Bf.size() >0) { 	
+		if (usersE5Bf.size() >0) {
 			out.print("<h4 style='color: red'>Servicios con respuesta mal formada a la solicitud de estado ("+usersE5Bf.size()+"): ");
 			for (int x=0; x < usersE5Bf.size(); x++) {
 				numAlu = usersE5Bf.get(x);
@@ -1039,7 +1230,7 @@ public class Query1 {
 			out.print("</h4>");
 		}
 
-		if (usersE4IOException.size() >0) { 	
+		if (usersE4IOException.size() >0) {
 			out.print("<h4 style='color: red'>Servicios donde falta la clase del servlet o éste produjo una excepción ("+usersE4IOException.size()+"): ");
 			for (int x=0; x < usersE4IOException.size(); x++) {
 				numAlu = usersE4IOException.get(x);
@@ -1049,7 +1240,7 @@ public class Query1 {
 			out.print("</h4>");
 		}
 
-		if (usersE3Encoding.size() >0) { 	
+		if (usersE3Encoding.size() >0) {
 			out.print("<h4 style='color: red'>Servicios que responden con una codificación incorrecta a la solicitud de estado ("+usersE3Encoding.size()+"): ");
 			for (int x=0; x < usersE3Encoding.size(); x++) {
 				numAlu = usersE3Encoding.get(x);
@@ -1059,7 +1250,7 @@ public class Query1 {
 			out.print("</h4>");
 		}
 
-		if (usersE2FileNotFound.size() >0) { 	
+		if (usersE2FileNotFound.size() >0) {
 			out.print("<h4 style='color: red'>Servicios sin el servlet declarado ("+usersE2FileNotFound.size()+"): ");
 			for (int x=0; x < usersE2FileNotFound.size(); x++) {
 				numAlu = usersE2FileNotFound.get(x);
@@ -1069,7 +1260,7 @@ public class Query1 {
 			out.print("</h4>");
 		}
 
-		if (usersE11NoPasswd.size() >0) { 	
+		if (usersE11NoPasswd.size() >0) {
 			out.print("<h4 style='color: red'>Servicios que no tienen passwd ("+usersE11NoPasswd.size()+"): ");
 			for (int x=0; x < usersE11NoPasswd.size(); x++) {
 				numAlu = usersE11NoPasswd.get(x);
@@ -1078,8 +1269,8 @@ public class Query1 {
 			}
 			out.print("</h4>");
 		}
-		
-		if (usersE1NoContext.size() >0) { 	
+
+		if (usersE1NoContext.size() >0) {
 			out.print("<h4 style='color: red'>Servicios sin contexto ("+usersE1NoContext.size()+"): ");
 			for (int x=0; x < usersE1NoContext.size(); x++) {
 				numAlu = usersE1NoContext.get(x);
@@ -1089,7 +1280,7 @@ public class Query1 {
 			out.print("</h4>");
 		}
 
-		if (usersE7Error.size() >0) { 	
+		if (usersE7Error.size() >0) {
 			out.print("<h4 style='color: red'>Servicios con algún error desconocido ("+usersE7Error.size()+"): ");
 			for (int x=0; x < usersE7Error.size(); x++) {
 				numAlu = usersE7Error.get(x);
@@ -1099,769 +1290,698 @@ public class Query1 {
 			out.print("</h4>");
 		}
 
-		CommonSINT.printEndPageChecker(out,  "13", esProfesor, CommonMML.CREATED);
+		CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
 	}
 
-	
-	
 
-	
-	// Métodos auxiliares para la correción de un alumno de la consulta 1
-	
-	
-	// pide y devuelve la lista de años de un usuario
-	// levanta excepciones si algo va mal
-	
-	private static ArrayList<String> requestAnios (String usuario, String url, String passwd) 
-									throws ExcepcionSINT  
+
+
+    // para corregir todos los servicios uno a uno
+	public static void doGetC1CorrectAllForm2 (HttpServletRequest request, HttpServletResponse response, String cLang) throws IOException
 	{
+		PrintWriter out = response.getWriter();
+		int esProfesor = 1;
+
+		out.println("<html>");
+		CommonMMLChecker.printHead(out, cLang);
+		CommonMMLChecker.printBodyHeader(out, cLang);
+
+		out.println("<h2>Consulta 1</h2>");
+		out.println("<h3>Corrección de todos los servicios uno a uno</h3>");
+
+		out.println("<form>");
+		out.println("<input type='hidden' name='screenP' value='141'>");  // Conduce a doGetC1CorrectAllReport2 --> CAMBIAR a 241 en C2
+
+		out.println("Introduzca el número de cuentas SINT a corregir: ");
+		out.println("<input id='inputNumCuentas' type='text' name='numCuentasP' size='3' pattern='[1-9]([0-9]{1,2})?' required>");
+
+		if (esProfesor == 1)
+			out.println("<p><input type='hidden' name='p' value='si'>");
+
+		out.println("<input class='enviar' type='submit' value='"+MsCP.getMsg(MsCP.CPC00,cLang)+"' >");  //CPC00=Enviar
+		out.println("</form>");
+
+		out.println("<form>");
+		if (esProfesor == 1)
+			out.println("<p><input type='hidden' name='p' value='si'>");
+		out.println("<p><input class='home' type='submit' value='"+MsCP.getMsg(MsCP.CPC01,cLang)+"'>");  //CPC01=Inicio
+		out.println("</form>");
+
+		CommonSINT.printFoot(out, MsMMLCh.CREATED);
+
+		out.println("</body></html>");
+	}
+
+
+
+
+	public static void doGetC1CorrectAllReport2(HttpServletRequest request, HttpServletResponse response, String cLang)
+						throws IOException, ServletException
+	{
+		String prevFase = "14"; // Esta es la 141  --> CAMBIAR en C2 a 24
+		PrintWriter out;
+		int esProfesor = 1;
+
+		// si no se recibe el parámetro con el número de cuentas no se hace nada
+
+		String numCuentasP = request.getParameter("numCuentasP");
+
+		if (numCuentasP == null) {
+		   out = response.getWriter();
+		   out.println("<html>");
+		   CommonMMLChecker.printHead(out, cLang);
+		   CommonMMLChecker.printBodyHeader(out, cLang);
+
+		   out.println("<h4>Error: no se ha recibido el número de cuentas</h4>");
+		   CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
+		   return;
+		}
+
+		int numCuentas=0;
+
+		try {
+		   numCuentas = Integer.parseInt(numCuentasP);
+		}
+		catch (NumberFormatException e) {
+		   out = response.getWriter();
+		   out.println("<html>");
+		   CommonMMLChecker.printHead(out, cLang);
+		   CommonMMLChecker.printBodyHeader(out, cLang);
+
+		   out.println("<h4>Error: el número de cuentas recibido no es un número válido</h4>");
+		   CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
+		   return;
+		}
+
+
+		if (numCuentas < 1) {
+		   out = response.getWriter();
+		   out.println("<html>");
+		   CommonMMLChecker.printHead(out, cLang);
+		   CommonMMLChecker.printBodyHeader(out, cLang);
+
+		   out.println("<h4>Error: el número de cuentas recibido es menor que uno</h4>");
+		   CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
+		   return;
+		}
+
+
+		BeanResultados miBean = new BeanResultados();
+		miBean.setCssFile(CommonMMLChecker.CSS_FILE);
+		miBean.setTitle(MsMMLCh.getMsg(MsMMLCh.CMML00,cLang));
+		miBean.setLang(MsMML.XML_LANGUAGE);
+		miBean.setCurso(MsMML.CURSO);
+		miBean.setNumCuentas(numCuentas);
+		miBean.setEsProfesor(esProfesor);
+		miBean.setCreated(MsMMLCh.CREATED);
+
+		request.setAttribute("db", miBean);
+
+		try {
+		    // ServletContext sc = getServletContext();
+
+			// transfiere el control a una página JSP con SSE, para ser notificada de cada corrección terminada
+		    RequestDispatcher dispatcher = CommonMMLChecker.servletContextSintProf.getRequestDispatcher("/InformeResultadosCorreccionC1.jsp");  // CAMBIAR C2
+		    dispatcher.forward(request, response);
+		}
+		catch (Exception s) {
+		   out = response.getWriter();
+		   out.println("<html>");
+		   CommonMMLChecker.printHead(out, cLang);
+		   CommonMMLChecker.printBodyHeader(out, cLang);
+
+		   out.println("<h4>Error: Exception"+s.toString()+"</h4");
+		   CommonSINT.printEndPageChecker(out,  prevFase, esProfesor, MsMMLCh.CREATED, cLang);
+		   return;
+		}
+
+
+	}
+
+
+
+	public static void doGetC1CorrectAllReport2Run(HttpServletRequest request, HttpServletResponse response, String cLang)
+						throws IOException, ServletException
+	{
+
+		  // notifica a la página JSP que se ha terminado cada corrección
+
+	    response.setContentType("text/event-stream");
+	    PrintWriter out = response.getWriter();
+
+	    out.write("retry: -1\n");
+
+	    String numCuentasP = request.getParameter("numCuentasP");
+	    if (numCuentasP == null) {
+		out.write("data: error no hay numCuentasP\n\n");
+		out.close();
+		return;
+	    }
+
+	    int numCuentas=0;
+
+	    try {
+		 numCuentas = Integer.parseInt(numCuentasP);
+	    }
+	    catch (NumberFormatException e) {
+		out.write("data: error numCuentasP no es entero\n\n");
+		out.close();
+		return;
+	    }
+
+	   if (numCuentas < 1) {
+		out.write("data: error numCuentasP es menor que uno\n\n");
+		out.close();
+		return;
+	   }
+
+
+	    String servicioAlu, sintUser, passwdAlu;
+
+	    bucle:
+	    for (int x=1; x <= numCuentas; x++) {
+		out.flush();
+		sintUser="sint"+x;
+
+		try {
+		    passwdAlu = CommonMMLChecker.getAluPasswd(sintUser);
+		}
+		catch (ExcepcionChecker ex) {
+				String codigo = ex.getCheckerFailure().getCodigo();
+		    if (codigo.equals("NOCONTEXT")) {
+			out.write("data: "+x+",NOCONTEXT\n\n");   // usersE1NoContext.add(x);
+		    }
+		    else {
+		        out.write("data: "+x+",NOPASSWD\n\n"); //  usersE11NoPasswd.add(x);
+		    }
+		    continue bucle;
+		}
+
+
+		servicioAlu = "http://"+CommonMMLChecker.server_port+"/"+sintUser+CommonMMLChecker.SERVICE_NAME;
+
+		try {
+		    Query1.correctC1OneStudent(request, sintUser, Integer.toString(x), servicioAlu, passwdAlu, cLang);
+		    out.write("data: "+x+",OK\n\n"); //   usersOK.add(x);
+		}
+		catch (ExcepcionChecker e) {
+		    CheckerFailure cf = e.getCheckerFailure();
+
+	            switch (cf.getCodigo()) {
+
+			case "01_NOCONTEXT":   // el contexto no está declarado o no existe su directorio
+			    out.write("data: "+x+",NOCONTEXT\n\n");  //  usersE1NoContext.add(x);
+			    continue bucle;
+			case "02_FILENOTFOUND":   // el servlet no está declarado.
+			    out.write("data: "+x+",FILENOTFOUND\n\n");   //  usersE2FileNotFound.add(x);
+			    continue bucle;
+			case "03_ENCODING":   // la secuencia de bytes recibida UTF-8 está malformada
+			    out.write("data: "+x+",ENCODING\n\n");    // usersE3Encoding.add(x);
+			    continue bucle;
+			case "04_IOEXCEPTION":    // la clase del servlet no está o produjo una excepción
+			    out.write("data: "+x+",IOEXCEPTION\n\n");     // usersE4IOException.add(x);
+			    continue bucle;
+			case "05_BF":   // la respuesta no es well-formed
+			    out.write("data: "+x+",BF\n\n");       // usersE5Bf.add(x);
+			    continue bucle;
+			case "06_INVALID":   // la respuesta es inválida
+			    out.write("data: "+x+",INVALID\n\n");     // usersE6Invalid.add(x);
+			    continue bucle;
+			case "07_ERRORUNKNOWN":   // error desconocido
+			    out.write("data: "+x+",ERRORUNKNOWN\n\n");    //  usersE7Error.add(x);
+			    continue bucle;
+			case "08_OKNOPASSWD":   // responde bien incluso sin passwd
+			    out.write("data: "+x+",OKNOPASSWD\n\n");     //   usersE8OkNoPasswd.add(x);
+			    continue bucle;
+			case "09_BADPASSWD":   // la passwd es incorrecta
+			    out.write("data: "+x+",BADPASSWD\n\n");    //   usersE9BadPasswd.add(x);
+			    continue bucle;
+			case "10_BADANSWER":   // la respuesta es inesperada
+			    out.write("data: "+x+",BADANSWER\n\n");     //  usersE10BadAnswer.add(x);
+			    continue bucle;
+			case "12_FILES":
+			    out.write("data: "+x+",FILES\n\n");    // usersE12Files.add(x);
+			    continue bucle;
+			case "20_DIFS":
+			    out.write("data: "+x+",DIFS\n\n");   // usersE20Diff.add(x);
+			    continue bucle;
+			default:      // error desconocido
+			    out.write("data: "+x+",??\n\n");   // usersE7Error.add(x);
+			    continue bucle;
+		    } // switch
+		 }  // catch
+	      } // for
+
+	      out.write("data: -1,FIN\n\n");
+	      out.close();
+
+	}
+
+
+
+
+
+
+
+
+
+
+
+	// Métodos auxiliares para la correción de un alumno de la consulta 1
+
+
+	// pide y devuelve la lista de years de un usuario
+	// levanta ExcepcionChecker si algo va mal
+
+	private static ArrayList<String> requestYears (String call, String cLang)
+									throws ExcepcionChecker
+	{
+		String currentMethod = Thread.currentThread().getStackTrace()[1].getMethodName();
+		CheckerFailure cf;
 		Document doc;
-		String call, qs;
-		ArrayList<String> listaAnios = new ArrayList<String>();
-		
-		qs = "?auto=si&"+PFASE+"=11&p="+passwd;
-		call = url+qs;
-		
+		ArrayList<String> listaYears = new ArrayList<String>();
+
 		CommonMMLChecker.errorHandler.clear();
 
 		try {
 			doc = CommonMMLChecker.db.parse(call);
 		}
 		catch (SAXException ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>SAXException al solicitar y parsear la lista de años: <br>"+usuario+" --> "+ex) ;
+			CommonMMLChecker.logCall(call);
+
+			cf = new CheckerFailure(call, "", ex.toString());
+			cf.addMotivo(currentMethod+": SAXException: "+MsMMLCh.getMsg(MsMMLCh.CMML27,cLang)+Query1.R1P); // solicitando/parseando la lista de
+			throw new ExcepcionChecker(cf);
 		}
 		catch (Exception ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>Exception al solicitar y parsear la lista de años: <br>"+usuario+" --> "+ex);
+			CommonMMLChecker.logCall(call);
+
+			cf = new CheckerFailure(call, "", ex.toString());
+			cf.addMotivo(currentMethod+": Exception: "+MsMMLCh.getMsg(MsMMLCh.CMML27,cLang)+Query1.R1P); // solicitando/parseando la lista de
+			throw new ExcepcionChecker(cf);
 		}
 
-		
+
 		if (CommonMMLChecker.errorHandler.hasErrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
+			CommonMMLChecker.logCall(call);
+
 			ArrayList<String> errors = CommonMMLChecker.errorHandler.getErrors();
 			String msg="";
-			
-			for (int x=0; x < errors.size(); x++) {
-				msg += "++++"+errors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La lista de años es inválida, tiene errors: "+usuario+" --> "+msg);
+
+			for (int x=0; x < errors.size(); x++)
+				if (x == (errors.size()-1)) msg += "++++"+errors.get(x);
+				else msg += "++++"+errors.get(x)+"<br>\n";
+
+
+			cf = new CheckerFailure(call, "", msg);
+			cf.addMotivo(currentMethod+": "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML28,cLang), "errors")+Query1.R1P); // resultado inválido, 'errors' en la lista de
+			throw new ExcepcionChecker(cf);
 		}
-		
+
 		if (CommonMMLChecker.errorHandler.hasFatalerrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
+			CommonMMLChecker.logCall(call);
+
 			ArrayList<String> fatalerrors = CommonMMLChecker.errorHandler.getFatalerrors();
 			String msg="";
-			
-			for (int x=0; x < fatalerrors.size(); x++) {
-				msg += "++++"+fatalerrors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La lista de años es inválida, tiene fatal errors: "+usuario+" --> "+msg); 
+
+			for (int x=0; x < fatalerrors.size(); x++)
+				if (x == (fatalerrors.size()-1)) msg += "++++"+fatalerrors.get(x);
+				else msg += "++++"+fatalerrors.get(x)+"<br>\n";
+
+
+			cf = new CheckerFailure(call, "", msg);
+			cf.addMotivo(currentMethod+": "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML28,cLang), "fatal errors")+Query1.R1P); // resultado inválido, 'fatal errors' en la lista de
+			throw new ExcepcionChecker(cf);
 		}
-		
+
 		if (doc == null) {
-			throw new ExcepcionSINT("Se recibe 'null' al solicitar y parsear la lista de años: "+usuario);
+			cf = new CheckerFailure(call, "", currentMethod+": "+MsMMLCh.getMsg(MsMMLCh.CMML30,cLang)+Query1.R1P);   // el parser devuelve 'null' al parsear la lista de
+			throw new ExcepcionChecker(cf);
 		}
-		
 
-		NodeList nlAnios = doc.getElementsByTagName("anio");
 
-		// procesamos todos los años
+		NodeList nlYears = doc.getElementsByTagName("years");
 
-		for (int x=0; x < nlAnios.getLength(); x++) {
-			Element elemAnio = (Element)nlAnios.item(x);
-			String anio = elemAnio.getTextContent().trim();
-			
-			listaAnios.add(anio);
+		if (nlYears.getLength() != 1) {
+		    cf = new CheckerFailure(call, "", currentMethod+": "+MsMMLCh.getMsg(MsMMLCh.CMML31,cLang));  // No se recibe '&lt;years>' al solicitar y parsear la lista de years
+			throw new ExcepcionChecker(cf);
 		}
-		
-		return listaAnios;
-	}
-	
-	
-	// para comparar el resultado de la F11: listas de años
-	
-	private static String comparaAnios (String usuario, ArrayList<String> pAnios, ArrayList<String> xAnios) 
-	{	
-		if (pAnios.size() != xAnios.size()) 
-			return usuario+": Debería devolver "+pAnios.size()+" años, pero devuelve "+xAnios.size(); 
-			
-		for (int x=0; x < pAnios.size(); x++) 
-			if (!xAnios.get(x).equals(pAnios.get(x))) 
-			return usuario+": El año número "+x+" debería ser '"+pAnios.get(x)+"', pero es '"+xAnios.get(x)+"'"; 
-		
-		return "OK";
-	}
-	
-	
-	
 
-	
-	// pide y devuelve la lista de peliculas de un año
-	// levanta excepciones si algo va mal
-	
-	private static ArrayList<Pelicula> requestPeliculasAnio (String usuario, String url, String anio, String passwd) 
-					throws ExcepcionSINT  
+		nlYears = doc.getElementsByTagName("year");
+
+		// procesamos todos los year
+
+		for (int x=0; x < nlYears.getLength(); x++) {
+			Element elemYear = (Element)nlYears.item(x);
+			String year = elemYear.getTextContent().trim();
+
+			listaYears.add(year);
+		}
+
+		return listaYears;
+	}
+
+
+	// para comparar el resultado de la F11: listas de years
+	// no devuelve nada si son iguales
+	// levanta ExcepcionChecker si hay diferencias
+
+	private static void comparaYears (String usuario, ArrayList<String> pYears, ArrayList<String> xYears, String cLang)
+			throws ExcepcionChecker
 	{
+		CheckerFailure cf;
+		String currentMethod = Thread.currentThread().getStackTrace()[1].getMethodName();
+
+		if (pYears.size() != xYears.size()) {
+			cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+MsCC.getMsg(MsCC.CC56,cLang)+pYears.size()+" "+Query1.R1P+", "+MsCC.getMsg(MsCC.CC57,cLang)+xYears.size()); // CC56...CC57 = debería devolver... pero ddevuelve
+			throw new ExcepcionChecker(cf);
+		}
+
+
+		for (int x=0; x < pYears.size(); x++)
+			if (!xYears.get(x).equals(pYears.get(x))) {
+				cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML36,cLang), xYears.get(x), x, pYears.get(x))); // diferencia year: valor recibido , posicion, valor esperado
+				throw new ExcepcionChecker(cf);
+			}
+
+		return;
+	}
+
+
+
+
+
+	// pide y devuelve la lista de movies de un year
+	// levanta ExcepcionChecker si algo va mal
+
+	private static ArrayList<Movie> requestMoviesYear (String call, String cLang)
+					throws ExcepcionChecker
+	{
+		String currentMethod = Thread.currentThread().getStackTrace()[1].getMethodName();
+		CheckerFailure cf;
 		Document doc;
-		String call, qs;
-		ArrayList<Pelicula> listaPeliculas = new ArrayList<Pelicula>();
-		
-		qs = "?auto=si&"+PFASE+"=12&"+PANIO+"="+anio+"&p="+passwd;
-		call = url+qs;
-		
+		ArrayList<Movie> listaMovies = new ArrayList<Movie>();
+
 		CommonMMLChecker.errorHandler.clear();
 
 		try {
-			doc = CommonMMLChecker.db.parse(call);   
+			doc = CommonMMLChecker.db.parse(call);
 		}
 		catch (SAXException ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>SAXException al solicitar y parsear la lista de películas:<br> "+usuario+"+"+anio+" --> "+ex) ;
+			CommonMMLChecker.logCall(call);
+
+			cf = new CheckerFailure(call, "", ex.toString());
+			cf.addMotivo(currentMethod+": SAXException: "+MsMMLCh.getMsg(MsMMLCh.CMML27,cLang)+Query1.R2P); // solicitando/parseando la lista de
+			throw new ExcepcionChecker(cf);
 		}
 		catch (Exception ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>Exception al solicitar y parsear la lista de películas:<br> "+usuario+"+"+anio+" --> "+ex);
+			CommonMMLChecker.logCall(call);
+
+			cf = new CheckerFailure(call, "", ex.toString());
+			cf.addMotivo(currentMethod+": Exception: "+MsMMLCh.getMsg(MsMMLCh.CMML27,cLang)+Query1.R2P); // solicitando/parseando la lista de
+			throw new ExcepcionChecker(cf);
 		}
 
 		if (CommonMMLChecker.errorHandler.hasErrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
+			CommonMMLChecker.logCall(call);
+
 			ArrayList<String> errors = CommonMMLChecker.errorHandler.getErrors();
 			String msg="";
-			
-			for (int x=0; x < errors.size(); x++) {
-				msg += "++++"+errors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La lista de películas es inválida, tiene errors: "+usuario+"+"+anio+" --> "+msg);
+
+			for (int x=0; x < errors.size(); x++)
+				if (x == (errors.size()-1)) msg += "++++"+errors.get(x);
+				else msg += "++++"+errors.get(x)+"<br>\n";
+
+			cf = new CheckerFailure(call, "", msg);
+			cf.addMotivo(currentMethod+": "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML28,cLang), "errors")+Query1.R2P); // resultado inválido, errors en la lista de
+			throw new ExcepcionChecker(cf);
 		}
-		
+
 		if (CommonMMLChecker.errorHandler.hasFatalerrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
+			CommonMMLChecker.logCall(call);
+
 			ArrayList<String> fatalerrors = CommonMMLChecker.errorHandler.getFatalerrors();
 			String msg="";
-			
-			for (int x=0; x < fatalerrors.size(); x++) {
-				msg += "++++"+fatalerrors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La lista de películas es inválida, tiene fatal errors: "+usuario+"+"+anio+" --> "+msg); 
+
+			for (int x=0; x < fatalerrors.size(); x++)
+				if (x == (fatalerrors.size()-1)) msg += "++++"+fatalerrors.get(x);
+				else msg += "++++"+fatalerrors.get(x)+"<br>\n";
+
+			cf = new CheckerFailure(call, "", msg);
+			cf.addMotivo(currentMethod+": "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML28,cLang), "fatalerrors")+Query1.R2P); // resultado inválido, fatal errors en la lista de
+			throw new ExcepcionChecker(cf);
 		}
-		
-		
+
+
 		if (doc == null) {
-			throw new ExcepcionSINT("Se recibe 'null' al solicitar y parsear la lista de películas:"+usuario+"+"+anio);
+			cf = new CheckerFailure(call, "", currentMethod+": "+MsMMLCh.getMsg(MsMMLCh.CMML30,cLang)+Query1.R2P);   // el parser devuelve 'null' al parsear la lista de
+			throw new ExcepcionChecker(cf);
 		}
-		
 
-		NodeList nlPeliculass = doc.getElementsByTagName("pelicula");
 
-		// procesamos todas las películas
+		NodeList nlMovies = doc.getElementsByTagName("movies");
 
-		for (int x=0; x < nlPeliculass.getLength(); x++) {
-			Element elemPelicula = (Element)nlPeliculass.item(x);
-			String titulo = elemPelicula.getTextContent().trim();
-			
-			String duracion = elemPelicula.getAttribute("duracion");
-			String langs = elemPelicula.getAttribute("langs");
-			
-			listaPeliculas.add(new Pelicula(titulo,Integer.valueOf(duracion), langs));
+		if (nlMovies.getLength() != 1) {
+		    	cf = new CheckerFailure(call, "", currentMethod+": "+MsMMLCh.getMsg(MsMMLCh.CMML32,cLang));  // No se recibe '&lt;movies>' al solicitar y parsear la lista de movies
+			throw new ExcepcionChecker(cf);
 		}
-		
-		return listaPeliculas;
+
+		nlMovies = doc.getElementsByTagName("movie");
+
+		// procesamos todos las movies
+
+		for (int x=0; x < nlMovies.getLength(); x++) {
+			Element elemMovie = (Element)nlMovies.item(x);
+			String title = elemMovie.getTextContent().trim();
+
+			String year = elemMovie.getAttribute("year");
+			String langs = elemMovie.getAttribute("langs");
+			String genres = elemMovie.getAttribute("genres");
+			ArrayList<String> listaGenres = new ArrayList<String>(Arrays.asList(genres.split(",")));
+			String synopsis = elemMovie.getAttribute("synopsis");
+
+			listaMovies.add(new Movie(title, year, listaGenres, synopsis, langs));
+		}
+
+		return listaMovies;
 	}
-	
-	
-	// para comparar el resultado de la F12: listas de películas
-	
-	private static String comparaPeliculas (String usuario, String anioActual, ArrayList<Pelicula> pPeliculas, ArrayList<Pelicula> xPeliculas) 
+
+
+
+
+	// para comparar el resultado de la F12: listas de movies
+	// no devuelve nada si son iguales
+	// levanta ExcepcionChecker si hay diferencias
+
+	private static void comparaMovies (String usuario, String yearActual, ArrayList<Movie> pMovies, ArrayList<Movie> xMovies, String cLang)
+			throws ExcepcionChecker
 	{
-		String pTituloPel, xTituloPel, pLangsPel, xLangsPel;
-		int pDuracionPel, xDuracionPel;
-		
-		if (pPeliculas.size() != xPeliculas.size()) 
-			return usuario+"+"+anioActual+": debería devolver "+pPeliculas.size()+" películas, pero devuelve "+xPeliculas.size()+"</h4>"; 
-	
-		for (int y=0; y < pPeliculas.size(); y++) {
-			
-			pTituloPel = pPeliculas.get(y).getTitulo();
-			xTituloPel = xPeliculas.get(y).getTitulo();
-			
-			if (!xTituloPel.equals(pTituloPel)) 
-				return usuario+"+"+anioActual+": la película número "+y+" debería ser '<pre>"+pTituloPel+"</pre>', pero es '<pre>"+xTituloPel+"</pre>'"; 
-			
-			pDuracionPel = pPeliculas.get(y).getDuracion();
-			xDuracionPel = xPeliculas.get(y).getDuracion();
-			
-		   	if (pDuracionPel != xDuracionPel) 
-				return usuario+"+"+anioActual+": la película número "+y+" debería durar '"+pDuracionPel+"', pero dura '"+xDuracionPel+"'"; 
-			
-		   	pLangsPel = pPeliculas.get(y).getIdiomas();
-		   	xLangsPel = xPeliculas.get(y).getIdiomas();
-			
-		   	if (!pLangsPel.equals(xLangsPel)) 
-				return usuario+"+"+anioActual+": la película número "+y+" debería tener idiomas '<pre>"+pLangsPel+"</pre>', pero tiene '<pre>"+xLangsPel+"</pre>'"; 
+		String currentMethod = Thread.currentThread().getStackTrace()[1].getMethodName();
+		CheckerFailure cf;
+		String pTitle, xTitle, pSynopsis, xSynopsis, pLangs, xLangs, pGenres, xGenres;
+
+		if (pMovies.size() != xMovies.size()) {
+			cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+Query1.R2P+" ("+usuario+"+"+yearActual+"): "+MsCC.getMsg(MsCC.CC56,cLang)+pMovies.size()+" "+Query1.R2P+", "+MsCC.getMsg(MsCC.CC57,cLang)+xMovies.size());  // CC56...CC57 = debería devolver...pero devuelve
+			throw new ExcepcionChecker(cf);
 		}
-		
-		return "OK";
+
+		for (int y=0; y < pMovies.size(); y++) {
+			pTitle = pMovies.get(y).getTitle();
+			xTitle = xMovies.get(y).getTitle();
+
+			if (!xTitle.equals(pTitle)) {
+				cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+Query1.R2P+" ('"+usuario+"', '" +yearActual+"'): "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML37,cLang), pTitle, y, xTitle)); // "Se esperaba la movie '%s' en la posición %d y se recibió '%s'"
+				throw new ExcepcionChecker(cf);
+			}
+
+			pSynopsis = pMovies.get(y).getSinopsis();
+			xSynopsis = xMovies.get(y).getSinopsis();
+
+			if (!xSynopsis.equals(pSynopsis)) {
+				cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+Query1.R2P+" ('"+usuario+"', '"+yearActual+"'): "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML38,cLang), pSynopsis, y, xSynopsis)); // "Se esperaba la sinopsis '%s' en la posición %d y se recibió '%s'"
+				throw new ExcepcionChecker(cf);
+			}
+
+			pLangs = pMovies.get(y).getLangs();
+			xLangs = xMovies.get(y).getLangs();
+
+			if (!xLangs.equals(pLangs)) {
+				cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+Query1.R2P+" ('"+usuario+"', '"+yearActual+"'): "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML39,cLang), pLangs, y, xLangs)); // "Se esperaban los idiomas '%s' en la posición %d y se recibió '%s'"
+				throw new ExcepcionChecker(cf);
+			}
+
+			pGenres = pMovies.get(y).getGenres();
+			xGenres = xMovies.get(y).getGenres();
+
+			String[] pGenresList = pGenres.split(",");
+			String[] xGenresList = xGenres.split(",");
+			
+			Arrays.sort(pGenresList);
+			Arrays.sort(xGenresList);
+
+			if (!Arrays.equals(pGenresList, xGenresList)) {
+				cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+Query1.R2P+" ('"+usuario+"', '"+yearActual+"'): "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML45,cLang), pGenres, y, xGenres)); // "Se esperaban los géneros '%s' en la posición %d y se recibió '%s'"
+				throw new ExcepcionChecker(cf);
+		  }
+
+		}
+
+		return;
 	}
-    
-	
-	
-	
-	
-	// pide y devuelve la lista de actores de una película de un año
-	// levanta excepciones si algo va mal
-	
-	private static ArrayList<Actor> requestActoresPelicula (String usuario, String url, String anio, String pel, String passwd) 
-									throws ExcepcionSINT  
+
+
+
+
+
+	// pide y devuelve la lista de casts de una movie de un year
+	// levanta ExcepcionChecker si algo va mal
+
+	private static ArrayList<Cast> requestCastsMovieYear (String call, String cLang)
+									throws ExcepcionChecker
 	{
+		String currentMethod = Thread.currentThread().getStackTrace()[1].getMethodName();
+		CheckerFailure cf;
 		Document doc;
-		String call, qs;
-		ArrayList<Actor> listaActores = new ArrayList<Actor>();
-		
-		try {
-		   qs = "?auto=si&"+PFASE+"=13&"+PANIO+"="+anio+"&"+PPELI+"="+URLEncoder.encode(pel, "utf-8")+"&p="+passwd;
-		}
-		catch (UnsupportedEncodingException ex) {throw new ExcepcionSINT("utf-8 no soportado");}
-			
-		call = url+qs;
-		
+		ArrayList<Cast> listaCasts = new ArrayList<Cast>();
+
 		CommonMMLChecker.errorHandler.clear();
 
 		try {
 			doc = CommonMMLChecker.db.parse(call);
 		}
 		catch (SAXException e) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>SAXException al solicitar y parsear la lista de actores:<br> "+usuario+"+"+anio+"+"+pel+" --> "+e) ;
+			CommonMMLChecker.logCall(call);
+
+			cf = new CheckerFailure(call, "", e.toString());
+			cf.addMotivo(currentMethod+": SAXException: "+MsMMLCh.getMsg(MsMMLCh.CMML27,cLang)+Query1.R3P); // solicitando/parseando la lista de
+			throw new ExcepcionChecker(cf);
 		}
 		catch (Exception e) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>Exception al solicitar y parsear la lista de actores:<br> "+usuario+"+"+anio+"+"+pel+" --> "+e);
+			CommonMMLChecker.logCall(call);
+
+			cf = new CheckerFailure(call, "", e.toString());
+			cf.addMotivo(currentMethod+": Exception: "+MsMMLCh.getMsg(MsMMLCh.CMML27,cLang)+Query1.R3P); // solicitando/parseando la lista de
+			throw new ExcepcionChecker(cf);
 		}
 
 		if (CommonMMLChecker.errorHandler.hasErrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
+			CommonMMLChecker.logCall(call);
+
 			ArrayList<String> errors = CommonMMLChecker.errorHandler.getErrors();
 			String msg="";
-			
-			for (int x=0; x < errors.size(); x++) {
-				msg += "++++"+errors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La lista de actores es inválida, tiene errors: "+usuario+"+"+anio+"+"+pel+" --> "+msg);
+
+			for (int x=0; x < errors.size(); x++)
+				if (x == (errors.size()-1)) msg += "++++"+errors.get(x);
+				else msg += "++++"+errors.get(x)+"<br>\n";
+
+			cf = new CheckerFailure(call, "", msg);
+			cf.addMotivo(currentMethod+": "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML28,cLang), "errors")+Query1.R3P); // resultado inválido, <errors> en la lista de
+			throw new ExcepcionChecker(cf);
 		}
-		
+
 		if (CommonMMLChecker.errorHandler.hasFatalerrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
+			CommonMMLChecker.logCall(call);
+
 			ArrayList<String> fatalerrors = CommonMMLChecker.errorHandler.getFatalerrors();
 			String msg="";
-			
-			for (int x=0; x < fatalerrors.size(); x++) {
-				msg += "++++"+fatalerrors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La lista de actores es inválida, tiene fatal errors: "+usuario+"+"+anio+"+"+pel+" --> "+msg); 
+
+			for (int x=0; x < fatalerrors.size(); x++)
+				if (x == (fatalerrors.size()-1)) msg += "++++"+fatalerrors.get(x);
+				else msg += "++++"+fatalerrors.get(x)+"<br>\n";
+
+			cf = new CheckerFailure(call, "", msg);
+			cf.addMotivo(currentMethod+": "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML28,cLang), "fatalerrors")+Query1.R3P); // resultado inválido, fatalerrors en la lista de
+			throw new ExcepcionChecker(cf);
 		}
-		
-		
+
+
 		if (doc == null) {
-			throw new ExcepcionSINT("Se recibe 'null' al solicitar y parsear la lista de actores: "+usuario+"+"+anio+"+"+pel);
+			cf = new CheckerFailure(call, "", currentMethod+": "+MsMMLCh.getMsg(MsMMLCh.CMML30,cLang)+Query1.R3P);   // el parser devuelve 'null' al parsear la lista de
+			throw new ExcepcionChecker(cf);
 		}
-		
 
-		NodeList nlActores = doc.getElementsByTagName("act");
+		NodeList nlCasts = doc.getElementsByTagName("thecast");
 
-		// procesamos todos los actores
-
-		for (int x=0; x < nlActores.getLength(); x++) {
-			Element elemActor = (Element)nlActores.item(x);
-			String nombre = elemActor.getTextContent().trim();
-			String ciudad = elemActor.getAttribute("ciudad");
-			
-			listaActores.add(new Actor(nombre,ciudad));
+		if (nlCasts.getLength() != 1) {
+		    	cf = new CheckerFailure(call, "", currentMethod+": "+MsMMLCh.getMsg(MsMMLCh.CMML33,cLang));  // No se recibe '&lt;thecast>' al solicitar y parsear la lista de casts
+			throw new ExcepcionChecker(cf);
 		}
-		
-		return listaActores;
+
+		nlCasts = doc.getElementsByTagName("cast");
+
+		// procesamos todas los cast
+
+		for (int x=0; x < nlCasts.getLength(); x++) {
+			Element elemCast = (Element)nlCasts.item(x);
+
+			String name = elemCast.getTextContent().trim();
+
+			String id = elemCast.getAttribute("id");
+			String role = elemCast.getAttribute("role");
+			String contact = elemCast.getAttribute("contact");
+
+			listaCasts.add(new Cast(name, id, role, contact));
+		}
+
+		return listaCasts;
 	}
-	
-	
-	
-	// para comparar el resultado de la F13: listas de actores
-	
-	private static String comparaActores (String usuario, String anioActual, String pelActual, ArrayList<Actor> pActores, ArrayList<Actor> xActores) 
-	{	
-	    if (pActores.size() != xActores.size()) 
-		return usuario+"+"+anioActual+"+"+pelActual+": debería devolver '"+pActores.size()+"' actores, pero devuelve '"+xActores.size()+"'"; 
-	
-	    
-	    for (int z=0; z < pActores.size(); z++) {
-	    	    if (!xActores.get(z).getNombre().equals(pActores.get(z).getNombre()))
-			    return usuario+"+"+anioActual+"+"+pelActual+": el actor número "+z+" debería ser '<pre>"+pActores.get(z).getNombre()+"</pre>', pero es '<pre>"+xActores.get(z).getNombre()+"</pre>'"; 
-	    	
-	    	    if (!xActores.get(z).getCiudad().equals(pActores.get(z).getCiudad()))
-			    return usuario+"+"+anioActual+"+"+pelActual+": la ciudad del actor número "+z+" debería ser '<pre>"+pActores.get(z).getCiudad()+"</pre>', pero es '<pre>"+xActores.get(z).getCiudad()+"</pre>'"; 
+
+
+
+	// para comparar el resultado de la F13: listas de casts
+	// no devuelve nada si son iguales
+	// levanta ExcepcionChecker si hay diferencias
+
+	private static void comparaCasts (String usuario, String yearActual, String movieActual, ArrayList<Cast> pCasts, ArrayList<Cast> xCasts, String cLang)
+				throws ExcepcionChecker
+	{
+		CheckerFailure cf;
+		String currentMethod = Thread.currentThread().getStackTrace()[1].getMethodName();
+
+	    if (pCasts.size() != xCasts.size()) {
+			  cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+Query1.R3P+" ("+usuario+"+"+yearActual+"+"+movieActual+"): "+MsCC.getMsg(MsCC.CC56,cLang)+pCasts.size()+" "+Query1.R3P+", "+MsCC.getMsg(MsCC.CC57,cLang)+xCasts.size()); // CC56...CC57 = debería devolver...pero devuelve
+			  throw new ExcepcionChecker(cf);
 	    }
-	    
-	    return "OK";  
+
+			String pName, xName, pId, xId, pRole, xRole, pContact, xContact;
+
+	    for (int z=0; z < pCasts.size(); z++) {
+						pName = pCasts.get(z).getName();
+						xName = xCasts.get(z).getName();
+
+	    	    if (!xName.equals(pName)) {
+	    			    cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+Query1.R3P+" ('"+usuario+"', '"+yearActual+"', '"+movieActual+"'): "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML40,cLang), pName, z, xName)); // "Se esperaba el cast '%s' en la posición %d y se recibió '%s'"
+					      throw new ExcepcionChecker(cf);
+	    	    }
+
+						pId = pCasts.get(z).getID();
+						xId = xCasts.get(z).getID();
+
+	    	    if (!xId.equals(pId)) {
+					      cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+Query1.R3P+" ('"+usuario+"', '"+yearActual+"', '"+movieActual+"'): "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML41,cLang), pId, z, xId)); // "Se esperaba el ID '%s' en la posición %d y se recibió '%s'"
+	    			    throw new ExcepcionChecker(cf);
+	    	    }
+
+						pRole = pCasts.get(z).getRole();
+						xRole = xCasts.get(z).getRole();
+
+	    	    if (!xRole.equals(pRole)) {
+	    			     cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+Query1.R3P+" ('"+usuario+"', '"+yearActual+"', '"+movieActual+"'): "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML42,cLang), pRole, z, xRole)); // "Se esperaba el role '%s' en la posición %d y se recibió '%s'"
+                 throw new ExcepcionChecker(cf);
+						}
+
+						pContact = pCasts.get(z).getContact();
+						xContact = xCasts.get(z).getContact();
+
+	    	    if (!xContact.equals(pContact)) {
+	    			     cf = new CheckerFailure("", "20_DIFS", currentMethod+": "+Query1.R3P+" ('"+usuario+"', '"+yearActual+"', '"+movieActual+"'): "+String.format(MsMMLCh.getMsg(MsMMLCh.CMML46,cLang), pContact, z, xContact)); // "Se esperaba el contact '%s' en la posición %d y se recibió '%s'"
+                 throw new ExcepcionChecker(cf);
+						}
+	    }
+
+	    return;
 	}
-	
-	
-	
-	
-	// pide y devuelve la filmografia de un actor de una película de un año
-	// levanta excepciones si algo va mal
-	
-	private static Filmografia requestFilmografiaActor (String usuario, String url, String anio, String pel, String act, String passwd) 
-								throws ExcepcionSINT  
-	{
-		Document doc;
-		String call, qs;
-		
-		ArrayList<Film> listaFilms = new ArrayList<Film>();
-		
-		try {
-			qs = "?auto=si&"+PFASE+"=14&"+PANIO+"="+anio+"&"+PPELI+"="+URLEncoder.encode(pel,"utf-8")+"&"+PACTOR+"="+URLEncoder.encode(act, "utf-8")+"&p="+passwd;
-		}
-		catch (UnsupportedEncodingException ex) {throw new ExcepcionSINT("utf-8 no soportado");}
-	
-		call = url+qs;
-		
-		CommonMMLChecker.errorHandler.clear();
 
-		try {
-			doc = CommonMMLChecker.db.parse(call);
-		}
-		catch (SAXException ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>SAXException al solicitar y parsear la filmografía:<br> "+usuario+"+"+anio+"+"+pel+"+"+act+" --> "+ex) ;
-		}
-		catch (Exception ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>Exception al solicitar y parsear la filmografía:<br> "+usuario+"+"+anio+"+"+pel+"+"+act+" --> "+ex) ;
-		}
 
-		if (CommonMMLChecker.errorHandler.hasErrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			ArrayList<String> errors = CommonMMLChecker.errorHandler.getErrors();
-			String msg="";
-			
-			for (int x=0; x < errors.size(); x++) {
-				msg += "++++"+errors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La filmografía es inválida, tiene errors: "+usuario+"+"+anio+"+"+pel+"+"+act+" --> "+msg);
-		}
-		
-		if (CommonMMLChecker.errorHandler.hasFatalerrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			ArrayList<String> fatalerrors = CommonMMLChecker.errorHandler.getFatalerrors();
-			String msg="";
-			
-			for (int x=0; x < fatalerrors.size(); x++) {
-				msg += "++++"+fatalerrors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La filmografía es inválida, tiene fatal errors: "+usuario+"+"+anio+"+"+pel+"+"+act+" --> "+msg); 
-		}
-	
-		
-		if (doc == null) {
-			throw new ExcepcionSINT("Se recibe 'null' al solicitar y parsear la filmografía: "+usuario+"+"+anio+"+"+pel+"+"+act);
-		}
-		
-
-		NodeList nlFilmografia = doc.getElementsByTagName("filmografia");
-        if (nlFilmografia.getLength() != 1) throw new ExcepcionSINT(call+": No se recibe elemento 'filmografia'");
-		
-		Element elemFilmografia = (Element)nlFilmografia.item(0);
-		String nombreActor = elemFilmografia.getAttribute("nombre");
-		String personaje = elemFilmografia.getAttribute("personaje");
-		
-		NodeList nlFilms = elemFilmografia.getElementsByTagName("film");
-
-		// procesamos todos los films
-
-		for (int x=0; x < nlFilms.getLength(); x++) {
-			Element elemFilm = (Element)nlFilms.item(x);
-			String titulo = elemFilm.getTextContent().trim();
-			String oscar = elemFilm.getAttribute("oscar");
-				
-			listaFilms.add(new Film(titulo, oscar));
-		}
-		
-		return new Filmografia(nombreActor, personaje, listaFilms);
-	}
-	
-	
-	// para comparar el resultado de la F14: filmografía
-	
-	private static String comparaFilmografias (String usuario, String anioActual, String pelActual, String actorActual, Filmografia pFilmografia, Filmografia xFilmografia) 
-	{
-	    if (!pFilmografia.getNombre().equals(xFilmografia.getNombre()))
-			return usuario+"+"+anioActual+"+"+pelActual+"+"+actorActual+": debería ser '<pre>"+pFilmografia.getNombre()+"</pre>', pero es '<pre>"+xFilmografia.getNombre()+"</pre>'"; 
-			
-	    if (!pFilmografia.getPersonaje().equals(xFilmografia.getPersonaje()))
-			return usuario+"+"+anioActual+"+"+pelActual+"+"+actorActual+": debería ser el personaje '<pre>"+pFilmografia.getPersonaje()+"</pre>', pero es '<pre>"+xFilmografia.getPersonaje()+"</pre>'"; 
-	        
-	    ArrayList<Film> pFilms=pFilmografia.getFilms(), xFilms=xFilmografia.getFilms();
-	        
-	    // comparamos las listas de sintprof y sintX
-			
-	    if (pFilms.size() != xFilms.size()) 
-			return usuario+"+"+anioActual+"+"+pelActual+"+"+actorActual+": debería devolver '"+pFilms.size()+"' films, pero devuelve '"+xFilms.size()+"'"; 
-	    		
-	        Film pFilm, xFilm;
-	        
-	        for (int t=0; t < pFilms.size(); t++) {
-	        	pFilm = pFilms.get(t);
-	        	xFilm = xFilms.get(t);
-	        	
-	        	if (!xFilm.getTitulo().equals(pFilm.getTitulo())) 
-	    			return usuario+"+"+anioActual+"+"+pelActual+"+"+actorActual+": el film número "+t+" debería ser '<pre>"+pFilm.getTitulo()+"</pre>', pero es '<pre>"+xFilm.getTitulo()+"</pre>'"; 
-	        	
-	        	if (!xFilm.getOscar().equals(pFilm.getOscar())) 
-	    			return usuario+"+"+anioActual+"+"+pelActual+"+"+actorActual+": el film número "+t+" debería tener óscar '<pre>"+pFilm.getOscar()+"</pre>', pero tiene '<pre>"+xFilm.getOscar()+"</pre>'"; 
-	        	
-	        }  // for t
-	
-	    return "OK";
-	}
-		
-		
-		
-	// pide  la lista de filmografía de un actor de una película de un año
-	// comprueba que recibe del usuario las correspondientes notificaciones de error
-	// levanta excepciones si algo va mal
-	
-	private static void checkLackParam (String usuario, String url, String anio, String pel, String act, String passwd) 
-						throws ExcepcionSINT  
-	{
-		Document doc;
-		Element e;
-		String tagName, reason, call, qs, qs1, qs2, qs3;
-		
-		try {
-			qs = "?auto=si&"+PFASE+"=14&p="+passwd;
-			qs1 = qs+"&"+PPELI+"="+URLEncoder.encode(pel,"utf-8")+"&"+PACTOR+"="+URLEncoder.encode(act, "utf-8");  // falta PPAIS
-			qs2 = qs+"&"+PANIO+"="+anio+"&"+PACTOR+"="+URLEncoder.encode(act, "utf-8");                                // falta PPELI               
-			qs3 = qs+"&"+PANIO+"="+anio+"&"+PPELI+"="+URLEncoder.encode(pel,"utf-8");                            // falta PACTOR
-		}
-		catch (UnsupportedEncodingException ex) {throw new ExcepcionSINT("utf-8 no soportado");}
-		
-		
-		// probando qs1, donde falta PPAIS
-	
-		CommonMMLChecker.errorHandler.clear();
-		call = url+qs1;
-
-		try {
-			doc = CommonMMLChecker.db.parse(call);
-		}
-		catch (SAXException ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>SAXException al solicitar y parsear la filmografía sin '"+PANIO+"':<br> "+usuario+" --> "+ex) ;
-		}
-		catch (Exception ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>Exception al solicitar y parsear la filmografía sin '"+PANIO+"':<br> "+usuario+" --> "+ex) ;
-		}
-
-		if (CommonMMLChecker.errorHandler.hasErrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			ArrayList<String> errors = CommonMMLChecker.errorHandler.getErrors();
-			String msg="";
-			
-			for (int x=0; x < errors.size(); x++) {
-				msg += "++++"+errors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La respuesta (al solicitar y parsear la filmografía sin '"+PANIO+"') es inválida, tiene errors: "+usuario+" --> "+msg);
-		}
-		
-		if (CommonMMLChecker.errorHandler.hasFatalerrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			ArrayList<String> fatalerrors = CommonMMLChecker.errorHandler.getFatalerrors();
-			String msg="";
-			
-			for (int x=0; x < fatalerrors.size(); x++) {
-				msg += "++++"+fatalerrors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La respuesta (al solicitar y parsear la filmografía sin '"+PANIO+"') es inválida, tiene fatal errors: "+usuario+" --> "+msg); 
-		}
-			
-		if (doc == null) {
-			throw new ExcepcionSINT("Se recibe 'null' al solicitar la filmografía sin '"+PANIO+"': "+usuario);
-		}
-		
-		e = doc.getDocumentElement();
-		tagName = e.getTagName();
-		if (tagName.equals("wrongRequest")) {
-			reason = e.getTextContent();
-			if (!reason.equals("no param:"+PANIO))
-			throw new ExcepcionSINT("Se recibe <wrongRequest> pero sin 'no param:anio' al solicitar la filmografía sin '"+PANIO+"': "+usuario+"+"+reason);
-		}
-		else throw new ExcepcionSINT("No se recibe 'wrongRequest' al solicitar la filmografía sin '"+PANIO+"': "+usuario);
-		
-
-		
-		// probando qs2, donde falta PPELI
-		
-		CommonMMLChecker.errorHandler.clear();
-
-		call = url+qs2;
-		
-		try {
-			doc = CommonMMLChecker.db.parse(call);
-		}
-		catch (SAXException ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>SAXException al solicitar y parsear la filmografía sin '"+PPELI+"':<br> "+usuario+" --> "+ex) ;
-		}
-		catch (Exception ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>Exception al solicitar y parsear la filmografía sin '"+PPELI+"':<br> "+usuario+" --> "+ex) ;
-		}
-
-		if (CommonMMLChecker.errorHandler.hasErrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			ArrayList<String> errors = CommonMMLChecker.errorHandler.getErrors();
-			String msg="";
-			
-			for (int x=0; x < errors.size(); x++) {
-				msg += "++++"+errors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La respuesta (al solicitar y parsear la filmografía sin '"+PPELI+"') es inválida, tiene errors: "+usuario+" --> "+msg);
-		}
-		
-		if (CommonMMLChecker.errorHandler.hasFatalerrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			ArrayList<String> fatalerrors = CommonMMLChecker.errorHandler.getFatalerrors();
-			String msg="";
-			
-			for (int x=0; x < fatalerrors.size(); x++) {
-				msg += "++++"+fatalerrors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La respuesta (al solicitar y parsear la filmografía sin '"+PPELI+"') es inválida, tiene fatal errors: "+usuario+" --> "+msg); 
-		}
-			
-		if (doc == null) {
-			throw new ExcepcionSINT("Se recibe 'null' al solicitar la filmografía sin '"+PPELI+"': "+usuario);
-		}
-		
-		e = doc.getDocumentElement();
-		tagName = e.getTagName();
-		if (tagName.equals("wrongRequest")) {
-			reason = e.getTextContent();
-			if (!reason.equals("no param:"+PPELI))
-			throw new ExcepcionSINT("Se recibe <wrongRequest> pero sin 'no param:"+PPELI+"' al solicitar la filmografía sin '"+PPELI+"': "+usuario+"+"+reason);
-		}
-		else throw new ExcepcionSINT("No se recibe 'wrongRequest' al solicitar la filmografía sin '"+PPELI+"': "+usuario);
-		
-		
-	// probando qs3, donde falta PACTOR
-		
-		CommonMMLChecker.errorHandler.clear();
-
-		call = url+qs3;
-		
-		try {
-			doc = CommonMMLChecker.db.parse(call);
-		}
-		catch (SAXException ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>SAXException al solicitar y parsear la filmografía sin '"+PACTOR+"':<br> "+usuario+" --> "+ex) ;
-		}
-		catch (Exception ex) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			throw new ExcepcionSINT("<br>Exception al solicitar y parsear la filmografía sin '"+PACTOR+"':<br> "+usuario+" --> "+ex) ;
-		}
-
-		if (CommonMMLChecker.errorHandler.hasErrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			ArrayList<String> errors = CommonMMLChecker.errorHandler.getErrors();
-			String msg="";
-			
-			for (int x=0; x < errors.size(); x++) {
-				msg += "++++"+errors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La respuesta (al solicitar y parsear la filmografía sin '"+PACTOR+"') es inválida, tiene errors: "+usuario+" --> "+msg);
-		}
-		
-		if (CommonMMLChecker.errorHandler.hasFatalerrors()) {
-			try {
-			     String urlContents = CommonSINT.getURLContents(call);
-			     CommonMMLChecker.logMMLChecker(urlContents);
-			}
-			catch (ExcepcionSINT es) {CommonMMLChecker.logMMLChecker(es.toString());}
-			
-			ArrayList<String> fatalerrors = CommonMMLChecker.errorHandler.getFatalerrors();
-			String msg="";
-			
-			for (int x=0; x < fatalerrors.size(); x++) {
-				msg += "++++"+fatalerrors.get(x);
-			}
-			
-			throw new ExcepcionSINT("La respuesta (al solicitar y parsear la filmografía sin '"+PACTOR+"') es inválida, tiene fatal errors: "+usuario+" --> "+msg); 
-		}
-			
-		if (doc == null) {
-			throw new ExcepcionSINT("Se recibe 'null' al solicitar la filmografía sin '"+PACTOR+"': "+usuario);
-		}
-		
-		e = doc.getDocumentElement();
-		tagName = e.getTagName();
-		if (tagName.equals("wrongRequest")) {
-			reason = e.getTextContent();
-			if (!reason.equals("no param:"+PACTOR))
-			throw new ExcepcionSINT("Se recibe <wrongRequest> pero sin 'no param:"+PACTOR+"' al solicitar la filmografía sin '"+PACTOR+"': "+usuario+"+"+reason);
-		}
-		else throw new ExcepcionSINT("No se recibe 'wrongRequest' al solicitar la filmografía sin '"+PACTOR+"': "+usuario);
-		
-		// todo bien
-		return;
-	}
 
 }
